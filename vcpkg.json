@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "ai-firewall",
+  "version-semver": "0.1.0",
+  "description": "KI-basert brannmur for Windows 11 (WinDivert + WFP + ONNX Runtime)",
+  "dependencies": [
+    "spdlog",
+    "nlohmann-json",
+    "gtest"
+  ],
+  "default-features": ["onnx", "gui"],
+  "features": {
+    "onnx": {
+      "description": "ONNX Runtime for AI-inferens",
+      "dependencies": ["onnxruntime"]
+    },
+    "gui": {
+      "description": "Qt 6 system tray-GUI",
+      "dependencies": [
+        { "name": "qtbase", "default-features": false, "features": ["widgets", "network", "gui", "png"] }
+      ]
+    }
+  }
+}

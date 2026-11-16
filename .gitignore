@@ -1,0 +1,15 @@
+build/
+out/
+ml/out/
+ml/data/
+/data/
+logs/
+*.user
+.vs/
+.vscode/
+__pycache__/
+*.pyc
+.venv/
+CMakeUserPresets.json
+vcpkg_installed/
+models/*.onnx
