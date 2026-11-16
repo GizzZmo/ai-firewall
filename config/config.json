@@ -1,0 +1,55 @@
+{
+  // Alle stier er relative til mappen der aifw_service.exe ligger.
+  "log_level": "info",
+  "log_file": "logs/aifw.log",
+  "rules_path": "config/rules.json",
+  "learning_path": "data/learning.json",
+  "pipe_name": "aifw",
+  "default_verdict": "allow",
+  "learning_mode": true,
+
+  "ai": {
+    "enabled": true,
+    "model_path": "models/flow_classifier.onnx",
+    "input_name": "",
+    "output_name": "",
+    "output_class_index": 1,
+    "worker_threads": 2,
+    "queue_capacity": 4096,
+    "max_batch": 32,
+    "block_threshold": 0.9,
+    "allow_threshold": 0.3,
+    "min_packets_before_inference": 4,
+    "reevaluate_every_packets": 64,
+    "max_consecutive_errors": 5,
+    "error_cooldown_sec": 30
+  },
+  "cache": {
+    "allow_ttl_sec": 300,
+    "block_ttl_sec": 900,
+    "max_entries": 100000
+  },
+  "flow": {
+    "tcp_idle_timeout_ms": 300000,
+    "udp_idle_timeout_ms": 60000,
+    "closed_timeout_ms": 10000,
+    "other_idle_timeout_ms": 30000,
+    "max_flows": 200000,
+    "entropy_sample_packets": 8
+  },
+  "windivert": {
+    "filter": "!loopback and (tcp or udp or icmp or icmpv6)",
+    "priority": 0,
+    "queue_length": 8192,
+    "queue_time_ms": 2000,
+    "queue_size_bytes": 4194304,
+    "batch_size": 16,
+    "worker_threads": 2,
+    "track_processes": true
+  },
+  "wfp": {
+    "enabled": true,
+    "persist_ai_blocks": false,
+    "sync_persistent_rules": true
+  }
+}

@@ -1,0 +1,102 @@
+{
+  // Eksempelregler. Kommentarer er tillatt (lastes med ignore_comments).
+  // Høyere "priority" vinner. Ved lik prioritet vinner "deny".
+  // Felter: id, action (allow|deny), direction (in|out|any), protocol (tcp|udp|icmp|icmpv6|any),
+  //         remote_ips (CIDR-liste), remote_ports / local_ports (tall eller "a-b"),
+  //         app (full sti, filnavn eller wildcard, case-insensitiv), enabled, persistent (WFP), comment.
+  "version": 1,
+  "rules": [
+    {
+      "id": "allow-dns-out",
+      "action": "allow",
+      "direction": "out",
+      "protocol": "udp",
+      "remote_ports": [53],
+      "priority": 100,
+      "comment": "DNS ut"
+    },
+    {
+      "id": "allow-dhcp",
+      "action": "allow",
+      "protocol": "udp",
+      "local_ports": [68],
+      "remote_ports": [67],
+      "priority": 100,
+      "comment": "DHCP-klient"
+    },
+    {
+      "id": "allow-ntp",
+      "action": "allow",
+      "direction": "out",
+      "protocol": "udp",
+      "remote_ports": [123],
+      "priority": 100
+    },
+    {
+      "id": "allow-lan",
+      "action": "allow",
+      "remote_ips": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fe80::/10"],
+      "priority": 60,
+      "comment": "Lokalt nettverk – juster etter behov"
+    },
+    {
+      "id": "deny-smb-internet",
+      "action": "deny",
+      "direction": "out",
+      "protocol": "tcp",
+      "remote_ports": [139, 445],
+      "priority": 50,
+      "persistent": true,
+      "comment": "Ingen SMB mot internett (LAN tillates over)"
+    },
+    {
+      "id": "deny-telnet",
+      "action": "deny",
+      "protocol": "tcp",
+      "remote_ports": [23, 2323],
+      "priority": 90,
+      "persistent": true
+    },
+    {
+      "id": "deny-rdp-inbound",
+      "action": "deny",
+      "direction": "in",
+      "protocol": "tcp",
+      "local_ports": [3389],
+      "priority": 90,
+      "comment": "Ingen RDP inn fra internett"
+    },
+    {
+      "id": "deny-documentation-nets",
+      "action": "deny",
+      "remote_ips": ["192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24", "2001:db8::/32"],
+      "priority": 95,
+      "comment": "TEST-NET (RFC 5737/3849) – eksempel på blokkliste"
+    },
+    {
+      "id": "allow-browsers-web",
+      "action": "allow",
+      "direction": "out",
+      "protocol": "tcp",
+      "remote_ports": [80, 443],
+      "app": "*\\Google\\Chrome\\Application\\chrome.exe",
+      "priority": 40
+    },
+    {
+      "id": "allow-edge-web",
+      "action": "allow",
+      "direction": "out",
+      "remote_ports": [80, 443],
+      "app": "msedge.exe",
+      "priority": 40
+    },
+    {
+      "id": "example-disabled",
+      "action": "deny",
+      "remote_ports": ["1-65535"],
+      "enabled": false,
+      "priority": 1000,
+      "comment": "Deaktivert eksempel: blokker alt"
+    }
+  ]
+}

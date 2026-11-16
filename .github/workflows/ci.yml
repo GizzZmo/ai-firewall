@@ -1,0 +1,37 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  linux-core:
+    # Plattformuavhengig kjerne + tester (ingen WinDivert/WFP).
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build g++-14
+      - run: cmake --preset linux-core -DCMAKE_CXX_COMPILER=g++-14
+      - run: cmake --build --preset linux-core
+      - run: ctest --preset linux-core
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: ML-pipeline (syntetiske data) + ONNX-verifisering
+        working-directory: ml
+        run: |
+          pip install -r requirements.txt
+          python -m aifw_ml.train --flows 1500 --out out
+          python -m aifw_ml.verify_onnx
+
+  windows:
+    runs-on: windows-2022
+    env:
+      VCPKG_ROOT: C:\\vcpkg
+    steps:
+      - uses: actions/checkout@v4
+      - name: WinDivert
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://github.com/basil00/WinDivert/releases/download/v2.2.2/WinDivert-2.2.2-A.zip -OutFile wd.zip
+          Expand-Archive wd.zip -DestinationPath third_party
+          "WINDIVERT_DIR=$PWD\\third_party\\WinDivert-2.2.2-A" | Out-File -Append $env:GITHUB_ENV
+      - run: cmake --preset windows-vcpkg -DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON -DVCPKG_MANIFEST_FEATURES=onnx -DAIFW_BUILD_GUI=OFF
+      - run: cmake --build --preset windows-release
+      - run: ctest --preset windows-release
