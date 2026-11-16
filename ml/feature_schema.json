@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "features": [
+    "duration_sec",
+    "fwd_packets",
+    "bwd_packets",
+    "fwd_bytes",
+    "bwd_bytes",
+    "pkt_len_mean",
+    "pkt_len_std",
+    "iat_mean_ms",
+    "iat_std_ms",
+    "syn_count",
+    "fin_count",
+    "rst_count",
+    "psh_count",
+    "payload_entropy_mean",
+    "dst_port_norm",
+    "protocol_tcp",
+    "protocol_udp",
+    "packets_per_sec",
+    "bytes_per_sec",
+    "fwd_bwd_ratio"
+  ],
+  "descriptions": {
+    "duration_sec": "Tid fra første til siste pakke (sekunder)",
+    "fwd_packets": "Antall utgående pakker (lokal -> remote)",
+    "bwd_packets": "Antall inngående pakker (remote -> lokal)",
+    "fwd_bytes": "Utgående bytes (IP-lengde)",
+    "bwd_bytes": "Inngående bytes (IP-lengde)",
+    "pkt_len_mean": "Gjennomsnittlig pakkelengde",
+    "pkt_len_std": "Standardavvik pakkelengde (utvalg)",
+    "iat_mean_ms": "Gjennomsnittlig tid mellom pakker (ms)",
+    "iat_std_ms": "Standardavvik tid mellom pakker (ms)",
+    "syn_count": "Antall TCP SYN",
+    "fin_count": "Antall TCP FIN",
+    "rst_count": "Antall TCP RST",
+    "psh_count": "Antall TCP PSH",
+    "payload_entropy_mean": "Snitt Shannon-entropi (bits/byte) for de første N payload-pakkene, maks 256 byte hver",
+    "dst_port_norm": "Remote-port / 65535",
+    "protocol_tcp": "1 hvis TCP",
+    "protocol_udp": "1 hvis UDP",
+    "packets_per_sec": "Pakker / max(varighet, 0.001s)",
+    "bytes_per_sec": "Bytes / max(varighet, 0.001s)",
+    "fwd_bwd_ratio": "fwd_packets / (bwd_packets + 1)"
+  },
+  "label": {
+    "0": "benign",
+    "1": "malicious"
+  },
+  "onnx": {
+    "input_name": "features",
+    "dtype": "float32",
+    "shape": [
+      null,
+      20
+    ],
+    "outputs": [
+      "label",
+      "probabilities"
+    ]
+  }
+}

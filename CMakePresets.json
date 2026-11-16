@@ -1,0 +1,48 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "windows-vcpkg",
+      "displayName": "Windows 11 / VS 2022 / vcpkg",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "WINDIVERT_DIR": "$env{WINDIVERT_DIR}",
+        "AIFW_FETCH_DEPS": "OFF"
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "windows-manual-onnx",
+      "inherits": "windows-vcpkg",
+      "displayName": "Windows / vcpkg uten onnx-feature (ONNX Runtime fra ONNXRUNTIME_DIR)",
+      "cacheVariables": {
+        "VCPKG_MANIFEST_NO_DEFAULT_FEATURES": "ON",
+        "VCPKG_MANIFEST_FEATURES": "gui",
+        "ONNXRUNTIME_DIR": "$env{ONNXRUNTIME_DIR}"
+      }
+    },
+    {
+      "name": "linux-core",
+      "displayName": "Linux: kun plattformuavhengig kjerne + tester",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "AIFW_WITH_ONNX": "OFF",
+        "AIFW_BUILD_GUI": "OFF",
+        "AIFW_BUILD_SERVICE": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "windows-release", "configurePreset": "windows-vcpkg", "configuration": "Release" },
+    { "name": "linux-core", "configurePreset": "linux-core" }
+  ],
+  "testPresets": [
+    { "name": "windows-release", "configurePreset": "windows-vcpkg", "configuration": "Release", "output": { "outputOnFailure": true } },
+    { "name": "linux-core", "configurePreset": "linux-core", "output": { "outputOnFailure": true } }
+  ]
+}
