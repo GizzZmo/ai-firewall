@@ -23,7 +23,7 @@ jobs:
   windows:
     runs-on: windows-2022
     env:
-      VCPKG_ROOT: C:\\vcpkg
+      VCPKG_ROOT: C:\vcpkg
     steps:
       - uses: actions/checkout@v4
       - name: WinDivert
@@ -31,7 +31,7 @@ jobs:
         run: |
           Invoke-WebRequest https://github.com/basil00/WinDivert/releases/download/v2.2.2/WinDivert-2.2.2-A.zip -OutFile wd.zip
           Expand-Archive wd.zip -DestinationPath third_party
-          "WINDIVERT_DIR=$PWD\\third_party\\WinDivert-2.2.2-A" | Out-File -Append $env:GITHUB_ENV
+          "WINDIVERT_DIR=$PWD\third_party\WinDivert-2.2.2-A" | Out-File -Append $env:GITHUB_ENV
       - run: cmake --preset windows-vcpkg -DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON -DVCPKG_MANIFEST_FEATURES=onnx -DAIFW_BUILD_GUI=OFF
       - run: cmake --build --preset windows-release
       - run: ctest --preset windows-release
