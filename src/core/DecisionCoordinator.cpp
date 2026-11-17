@@ -6,6 +6,9 @@
 #include <spdlog/spdlog.h>
 
 #include "FeatureExtractor.hpp"
+#include "DnsEnricher.hpp"
+#include "AppPromptHandler.hpp"
+#include "AppStats.hpp"
 
 namespace aifw {
 
@@ -24,13 +27,13 @@ std::string_view toString(DecisionSource s) noexcept {
 
 DecisionCoordinator::DecisionCoordinator(const Config& cfg, RuleEngine& rules, FlowTracker& flows, HostTracker& hosts,
                                          VerdictCache& cache, AIDecisionEngine* ai, LearningMode& learning,
-                                         INotifier& notifier, IPersistentRuleSink* sink, GeoIpLookup* geoip)
+                                         INotifier& notifier, IPersistentRuleSink* sink, GeoIpLookup* geoip,
+                                         DnsEnricher* dnsEnricher, AppPromptHandler* appPrompt, AppStats* appStats)
     : cfg_(cfg), rules_(rules), flows_(flows), hosts_(hosts), cache_(cache), ai_(ai), learning_(learning),
-      notifier_(notifier), sink_(sink), geoip_(geoip) {}
+      notifier_(notifier), sink_(sink), geoip_(geoip), dnsEnricher_(dnsEnricher), appPrompt_(appPrompt),
+      appStats_(appStats) {}
 
 DecisionCoordinator::~DecisionCoordinator() {
-    // AI-callbacks refererer til `this`. Eieren skal stoppe AIDecisionEngine først, men
-    // vi venter uansett på callbacks som er midt i kjøring.
     while (inFlight_.load() > 0) std::this_thread::yield();
 }
 
@@ -53,12 +56,42 @@ void DecisionCoordinator::enrichEvent(FirewallEvent& ev, const FlowKey& key) con
     if (geoip_ && geoip_->available()) {
         ev.country = geoip_->country(key.remoteIp);
     }
+    // DNS-beriking (synkron, bruker cache – rask hvis truffet)
+    if (dnsEnricher_ && key.remoteIp != 0) {
+        dnsEnricher_->enrich(ev, key.remoteIp);
+    }
+}
+
+void DecisionCoordinator::recordAppStats(const std::string& appPath, bool allowed, std::uint64_t bytes) {
+    if (appStats_ && !appPath.empty()) {
+        auto nowMs = static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count());
+        appStats_->record(appPath, allowed, bytes, nowMs);
+    }
+}
+
+void DecisionCoordinator::maybePromptApp(const std::string& appPath) {
+    if (appPrompt_ && !appPath.empty()) {
+        appPrompt_->maybePrompt(appPath);
+    }
 }
 
 Decision DecisionCoordinator::decide(const PacketInfo& pkt, TimePoint now) {
     packets_.fetch_add(1, std::memory_order_relaxed);
-    auto finish = [this](Decision d) {
-        (d.verdict == Verdict::Block ? blocked_ : allowed_).fetch_add(1, std::memory_order_relaxed);
+    auto finish = [this, &pkt](Decision d) {
+        const bool allowed = (d.verdict != Verdict::Block);
+        (allowed ? allowed_ : blocked_).fetch_add(1, std::memory_order_relaxed);
+
+        // Per-app-statistikk
+        const auto& appPath = pkt.appPath;
+        recordAppStats(appPath, allowed, pkt.length);
+
+        // Spør brukeren om ny app (bare ved første pakke og hvis tillatt)
+        if (allowed && pkt.direction == Direction::Outbound) {
+            maybePromptApp(appPath);
+        }
+
         return d;
     };
 
@@ -74,8 +107,7 @@ Decision DecisionCoordinator::decide(const PacketInfo& pkt, TimePoint now) {
         return finish({m->verdict, DecisionSource::Rule, m->ruleId});
     }
 
-    // 2) Cachet verdikt (typisk fra AI). Et cachet Allow hindrer IKKE re-evaluering:
-    //    en flyt som så harmløs ut etter 4 pakker kan endre karakter (f.eks. SYN-flom).
+    // 2) Cachet verdikt
     std::optional<Decision> cached;
     if (auto c = cache_.get(key, now)) {
         cacheHits_.fetch_add(1, std::memory_order_relaxed);
@@ -87,13 +119,12 @@ Decision DecisionCoordinator::decide(const PacketInfo& pkt, TimePoint now) {
         }
     }
 
-    // Flyttabellen full: vi har ingen statistikk -> fail-safe standard.
     if (!stats) {
         failSafe_.fetch_add(1, std::memory_order_relaxed);
         return finish({cfg_.defaultVerdict, DecisionSource::FailSafe, {}});
     }
 
-    // 3) Vertsnivå-deteksjon (kun på første pakke i ny flyt).
+    // 3) Vertsnivå-deteksjon
     if (stats->totalPackets() == 1) {
         const bool isSyn = (pkt.protocol == Protocol::TCP) && (pkt.tcpFlags & tcpflags::SYN) &&
                            !(pkt.tcpFlags & tcpflags::ACK);
@@ -108,7 +139,6 @@ Decision DecisionCoordinator::decide(const PacketInfo& pkt, TimePoint now) {
             enrichEvent(ev, key);
             notifier_.notify(ev);
             if (!learning_.enabled()) {
-                // Cache blokkeringen slik at senere pakker i samme flyt også stoppes.
                 cache_.put(key, Verdict::Block, 1.0, now + cfg_.cache.blockTtl);
                 if (sink_ && cfg_.wfp.persistAiBlocks) {
                     try {
@@ -122,8 +152,7 @@ Decision DecisionCoordinator::decide(const PacketInfo& pkt, TimePoint now) {
         }
     }
 
-    // 4) Asynkron AI. Kun når flyten har nok pakker til meningsfulle features, og
-    //    re-evaluer med jevne mellomrom for lange flyter.
+    // 4) Asynkron AI
     if (ai_ && cfg_.ai.enabled) {
         const bool healthy = ai_->healthy();
         if (healthy != aiWasHealthy_.exchange(healthy)) {
@@ -166,17 +195,15 @@ Decision DecisionCoordinator::decide(const PacketInfo& pkt, TimePoint now) {
 
 void DecisionCoordinator::onInference(const InferenceResult& r, const MatchContext& ctx) {
     clearPending(r.key);
-    if (!r.ok) {
-        // Fail-safe: ingen cache-oppføring; neste pakke går via regler/standard.
-        return;
-    }
+    if (!r.ok) return;
+
     const auto now = Clock::now();
     if (r.verdict == Verdict::Block) {
-        // I læringsmodus re-evalueres flyter som allerede er flagget; tell/varsle kun én gang per flyt.
         const auto prev = cache_.get(r.key, now);
         const bool alreadyFlagged = prev && prev->verdict == Verdict::Block;
         cache_.put(r.key, Verdict::Block, r.score, now + cfg_.cache.blockTtl);
         if (alreadyFlagged) return;
+
         FirewallEvent ev;
         ev.flow = r.key.toString();
         ev.app = ctx.appPath;
@@ -203,11 +230,10 @@ void DecisionCoordinator::onInference(const InferenceResult& r, const MatchConte
     } else if (r.verdict == Verdict::Allow) {
         cache_.put(r.key, Verdict::Allow, r.score, now + cfg_.cache.allowTtl);
     }
-    // Unknown (gråsone): ikke cache; ny vurdering ved neste re-evaluering.
 }
 
 CoordinatorStats DecisionCoordinator::stats() const noexcept {
-    return {packets_.load(), allowed_.load(),     blocked_.load(),  ruleHits_.load(),
+    return {packets_.load(), allowed_.load(), blocked_.load(), ruleHits_.load(),
             cacheHits_.load(), aiSubmitted_.load(), failSafe_.load(), wouldBlock_.load(), hostBlocks_.load()};
 }
 
