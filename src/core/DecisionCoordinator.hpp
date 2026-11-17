@@ -27,6 +27,10 @@
 
 namespace aifw {
 
+class DnsEnricher;
+class AppPromptHandler;
+class AppStats;
+
 enum class DecisionSource { Rule, Cache, Default, AiPending, FailSafe, Learning, Host, Invalid };
 std::string_view toString(DecisionSource s) noexcept;
 
@@ -52,9 +56,12 @@ class DecisionCoordinator {
 public:
     /// Ikke-eiende referanser: eierskapet ligger i FirewallService (lever lengre enn denne).
     /// ai og sink kan være nullptr (AI avslått / ingen WFP). geoip kan være nullptr.
+    /// dnsEnricher og appPrompt kan være nullptr (valgfrie funksjoner).
     DecisionCoordinator(const Config& cfg, RuleEngine& rules, FlowTracker& flows, HostTracker& hosts,
                         VerdictCache& cache, AIDecisionEngine* ai, LearningMode& learning, INotifier& notifier,
-                        IPersistentRuleSink* sink = nullptr, GeoIpLookup* geoip = nullptr);
+                        IPersistentRuleSink* sink = nullptr, GeoIpLookup* geoip = nullptr,
+                        DnsEnricher* dnsEnricher = nullptr, AppPromptHandler* appPrompt = nullptr,
+                        AppStats* appStats = nullptr);
     ~DecisionCoordinator();
     DecisionCoordinator(const DecisionCoordinator&) = delete;
     DecisionCoordinator& operator=(const DecisionCoordinator&) = delete;
@@ -74,6 +81,8 @@ private:
     bool markPending(const FlowKey& k);
     void clearPending(const FlowKey& k);
     void enrichEvent(FirewallEvent& ev, const FlowKey& key) const;
+    void recordAppStats(const std::string& appPath, bool allowed, std::uint64_t bytes);
+    void maybePromptApp(const std::string& appPath);
 
     const Config& cfg_;
     RuleEngine& rules_;
@@ -85,6 +94,9 @@ private:
     INotifier& notifier_;
     IPersistentRuleSink* sink_;
     GeoIpLookup* geoip_;
+    DnsEnricher* dnsEnricher_;
+    AppPromptHandler* appPrompt_;
+    AppStats* appStats_;
 
     std::mutex pendingMutex_;
     std::unordered_set<FlowKey, FlowKeyHash> pending_;  // flyter med inferens underveis
