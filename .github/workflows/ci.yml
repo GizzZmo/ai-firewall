@@ -72,6 +72,7 @@ jobs:
           path: |
             ml/out/**
             ml/**/*.json
+          retention-days: 7
           if-no-files-found: warn
 
   linux-sanitizers:
@@ -176,4 +177,6 @@ jobs:
         with:
           name: ai-firewall-windows
           path: .\ai-firewall-windows.zip
+          retention-days: 14
+          compression-level: 0
           if-no-files-found: warn
