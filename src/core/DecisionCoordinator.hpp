@@ -1,9 +1,10 @@
-// Kombinerer regelmotor, verdikt-cache, AI og læringsmodus til én beslutning per pakke.
+// Kombinerer regelmotor, verdikt-cache, AI, læringsmodus og vertsnivå-deteksjon til én beslutning per pakke.
 //
 // Rekkefølge (rask sti først – pakkeveien skal aldri vente på AI):
 //   1. Eksplisitt regel (RuleEngine)            -> verdikt umiddelbart
 //   2. Cachet verdikt for flyten (VerdictCache) -> verdikt umiddelbart
-//   3. Standardverdikt + asynkron AI-vurdering  -> AI-svaret havner i cachen og
+//   3. Vertsnivå-alarm (HostTracker)            -> block hvis terskel overskredet
+//   4. Standardverdikt + asynkron AI-vurdering  -> AI-svaret havner i cachen og
 //      gjelder fra neste pakke i flyten
 // Ved AI-feil / åpen circuit breaker / full kø brukes kun 1+2+standard (fail-safe).
 #pragma once
@@ -17,6 +18,7 @@
 #include "AIDecisionEngine.hpp"
 #include "Config.hpp"
 #include "FlowTracker.hpp"
+#include "HostTracker.hpp"
 #include "LearningMode.hpp"
 #include "Notifier.hpp"
 #include "RuleEngine.hpp"
@@ -24,7 +26,7 @@
 
 namespace aifw {
 
-enum class DecisionSource { Rule, Cache, Default, AiPending, FailSafe, Learning, Invalid };
+enum class DecisionSource { Rule, Cache, Default, AiPending, FailSafe, Learning, Host, Invalid };
 std::string_view toString(DecisionSource s) noexcept;
 
 struct Decision {
@@ -42,15 +44,15 @@ public:
 
 struct CoordinatorStats {
     std::uint64_t packets{0}, allowed{0}, blocked{0}, ruleHits{0}, cacheHits{0}, aiSubmitted{0}, failSafe{0},
-        wouldBlock{0};
+        wouldBlock{0}, hostBlocks{0};
 };
 
 class DecisionCoordinator {
 public:
     /// Ikke-eiende referanser: eierskapet ligger i FirewallService (lever lengre enn denne).
     /// ai og sink kan være nullptr (AI avslått / ingen WFP).
-    DecisionCoordinator(const Config& cfg, RuleEngine& rules, FlowTracker& flows, VerdictCache& cache,
-                        AIDecisionEngine* ai, LearningMode& learning, INotifier& notifier,
+    DecisionCoordinator(const Config& cfg, RuleEngine& rules, FlowTracker& flows, HostTracker& hosts,
+                        VerdictCache& cache, AIDecisionEngine* ai, LearningMode& learning, INotifier& notifier,
                         IPersistentRuleSink* sink = nullptr);
     ~DecisionCoordinator();
     DecisionCoordinator(const DecisionCoordinator&) = delete;
@@ -74,6 +76,7 @@ private:
     const Config& cfg_;
     RuleEngine& rules_;
     FlowTracker& flows_;
+    HostTracker& hosts_;
     VerdictCache& cache_;
     AIDecisionEngine* ai_;
     LearningMode& learning_;
@@ -85,7 +88,7 @@ private:
     std::atomic<bool> aiWasHealthy_{true};
 
     std::atomic<std::uint64_t> packets_{0}, allowed_{0}, blocked_{0}, ruleHits_{0}, cacheHits_{0}, aiSubmitted_{0},
-        failSafe_{0}, wouldBlock_{0};
+        failSafe_{0}, wouldBlock_{0}, hostBlocks_{0};
     // Teller for callbacks som fortsatt kjører, slik at destruktøren kan vente på dem.
     std::atomic<int> inFlight_{0};
 };
