@@ -21,13 +21,29 @@ jobs:
       - name: Install deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build g++-14 cppcheck
+          sudo apt-get install -y ninja-build g++-14 cppcheck ccache
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}-${{ hashFiles('src/**/*.cpp', 'src/**/*.hpp', 'CMakeLists.txt') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
 
       - name: Configure
-        run: cmake --preset linux-core -DCMAKE_CXX_COMPILER=g++-14
+        env:
+          CCACHE_DIR: ~/.ccache
+          CCACHE_MAXSIZE: 500M
+        run: |
+          cmake --preset linux-core -DCMAKE_CXX_COMPILER=g++-14 \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
         run: cmake --build --preset linux-core
+
+      - name: ccache stats
+        run: ccache --show-stats
 
       - name: Test
         run: ctest --preset linux-core --output-on-failure
@@ -39,6 +55,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
 
       - name: ML pipeline validation
         working-directory: ml
@@ -89,19 +106,44 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        id: vcpkg-cache
+        with:
+          path: |
+            ${{ github.workspace }}\vcpkg
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-
+
       - name: Setup vcpkg
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          git clone --depth 1 https://github.com/microsoft/vcpkg.git $env:GITHUB_WORKSPACE\vcpkg
+          if (-not (Test-Path $env:VCPKG_ROOT)) {
+            git clone --depth 1 https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT
+          }
           .\vcpkg\bootstrap-vcpkg.bat
 
+      - name: Cache WinDivert
+        uses: actions/cache@v4
+        id: windivert-cache
+        with:
+          path: ${{ github.workspace }}\third_party\WinDivert-2.2.2-A
+          key: windivert-2.2.2-A
+
       - name: Download WinDivert
+        if: steps.windivert-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           Invoke-WebRequest `
             https://github.com/basil00/WinDivert/releases/download/v2.2.2/WinDivert-2.2.2-A.zip `
             -OutFile wd.zip
           Expand-Archive wd.zip -DestinationPath third_party
+
+      - name: Set WinDivert path
+        shell: pwsh
+        run: |
           "WINDIVERT_DIR=$PWD\third_party\WinDivert-2.2.2-A" | Out-File -Append $env:GITHUB_ENV
 
       - name: Configure
