@@ -40,6 +40,14 @@
     "entropy_sample_packets": 8
   },
 
+  "host": {
+    "enabled": true,
+    "window_sec": 10,
+    "max_unique_ports": 50,
+    "max_new_flows": 100,
+    "max_syns": 200
+  },
+
   "windivert": {
     "filter": "!loopback and (tcp or udp or icmp or icmpv6)",
     "priority": 0,
