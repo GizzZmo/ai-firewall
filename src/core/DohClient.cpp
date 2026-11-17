@@ -46,7 +46,7 @@ std::string DohClient::ipv6ToPtr(const uint8_t addr[16]) {
     // Konverter til ip6.arpa format (nibble-reversed)
     std::ostringstream oss;
     for (int i = 15; i >= 0; --i) {
-        char buf[4];
+        char buf[8];
         snprintf(buf, sizeof(buf), "%x.%x.", addr[i] & 0xF, (addr[i] >> 4) & 0xF);
         oss << buf;
     }

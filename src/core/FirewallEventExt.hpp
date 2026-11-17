@@ -4,6 +4,9 @@
 
 #include <string>
 #include <optional>
+#include <cstdint>
+
+#include <nlohmann/json.hpp>
 
 namespace aifw {
 

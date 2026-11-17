@@ -57,8 +57,11 @@ void DecisionCoordinator::enrichEvent(FirewallEvent& ev, const FlowKey& key) con
         ev.country = geoip_->country(key.remoteIp);
     }
     // DNS-beriking (synkron, bruker cache – rask hvis truffet)
-    if (dnsEnricher_ && key.remoteIp != 0) {
-        dnsEnricher_->enrich(ev, key.remoteIp);
+    if (dnsEnricher_ && key.remoteIp.version == 4) {
+        const auto& b = key.remoteIp.bytes;
+        const auto host = (std::uint32_t{b[0]} << 24) | (std::uint32_t{b[1]} << 16) |
+                          (std::uint32_t{b[2]} << 8) | std::uint32_t{b[3]};
+        dnsEnricher_->enrich(ev, host);
     }
 }
 
@@ -85,7 +88,7 @@ Decision DecisionCoordinator::decide(const PacketInfo& pkt, TimePoint now) {
 
         // Per-app-statistikk
         const auto& appPath = pkt.appPath;
-        recordAppStats(appPath, allowed, pkt.length);
+        recordAppStats(appPath, allowed, pkt.totalLength);
 
         // Spør brukeren om ny app (bare ved første pakke og hvis tillatt)
         if (allowed && pkt.direction == Direction::Outbound) {
