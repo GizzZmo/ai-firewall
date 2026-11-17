@@ -9,11 +9,12 @@ add_executable(aifw_tests
     test_coordinator.cpp
     test_learning.cpp
     test_config_ipc.cpp
-    test_feature_parity.cpp)
+    test_feature_parity.cpp
+    test_dns_parser.cpp)
 if(AIFW_WITH_ONNX)
     target_sources(aifw_tests PRIVATE test_onnx_model.cpp)
 endif()
-target_link_libraries(aifw_tests PRIVATE aifw::core GTest::gtest_main)
+target_link_libraries(aifw_tests PRIVATE aifw::core aifw::options GTest::gtest_main)
 target_compile_definitions(aifw_tests PRIVATE
     AIFW_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 include(GoogleTest)
