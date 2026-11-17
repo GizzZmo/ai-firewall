@@ -13,6 +13,7 @@
 #include "DecisionCoordinator.hpp"
 #include "FlowExporter.hpp"
 #include "FlowTracker.hpp"
+#include "GeoIpLookup.hpp"
 #include "HostTracker.hpp"
 #include "LearningMode.hpp"
 #include "Notifier.hpp"
@@ -66,6 +67,7 @@ private:
     VerdictCache cache_;
     LearningMode learning_;
     std::unique_ptr<FlowExporter> exporter_;
+    std::unique_ptr<GeoIpLookup> geoip_;
     std::unique_ptr<AIDecisionEngine> ai_;
     std::unique_ptr<DecisionCoordinator> coordinator_;  // etter ai_: destrueres før ai_
     TimePoint lastLearningSave_{Clock::now()};
