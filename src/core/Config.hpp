@@ -56,6 +56,11 @@ struct WfpConfig {
     bool syncPersistentRules{true}; // legg regler med "persistent": true inn i WFP ved oppstart
 };
 
+struct GeoIpConfig {
+    bool enabled{false};
+    std::string mmdbPath{"data/GeoLite2-Country.mmdb"};  // relativ til baseDir
+};
+
 struct Config {
     std::string logLevel{"info"};
     std::string logFile{"logs/aifw.log"};
@@ -70,6 +75,7 @@ struct Config {
     HostTrackerConfig host;
     WinDivertConfig windivert;
     WfpConfig wfp;
+    GeoIpConfig geoip;
 
     static Config fromJson(const nlohmann::json& j);
     static Config loadFromFile(const std::filesystem::path& path);
