@@ -10,10 +10,16 @@
 - [x] TCP State Machine (RFC 793-tilstander integrert i feature extraction)
 - [x] Eksport av ekte flyter fra tjenesten (anonymisert) for trening på egen trafikk
 - [x] Modellversjonering + signert modellfil, hot-reload av modell
-- [~] DNS-oppslag i loggen (`DnsResolver` + `FirewallEventExt` klar; full integrasjon i DecisionCoordinator gjenstår)
-- [~] Per-app-statistikk og "spør brukeren"-dialog (`AppStats` + IPC-meldingstype klar; GUI-dialog gjenstår)
-- [~] WinUI 3-variant av GUI-et (arkitektur vurdert i docs/WINUI3_ARCHITECTURE.md; implementasjon gjenstår)
-- [~] Fuzzing av pakkeparseren (forbedret fuzzer med IPv4/IPv6 + extension headers; kjøring med corpus gjenstår)
-- [~] Gruppe-basert tilgang for GUI-kommandoer (`AccessControl` med LookupAccountName klar)
+- [~] DNS-oppslag i loggen (`DnsEnricher` klar; full integrasjon i DecisionCoordinator gjenstår)
+- [~] Per-app-statistikk og "spør brukeren"-dialog (`AppPromptHandler` klar; GUI-dialog gjenstår)
+- [~] WinUI 3-variant av GUI-et (skeleton i `gui-winui/`; full implementasjon gjenstår)
+- [~] Fuzzing av pakkeparseren (forbedret fuzzer; kjøring med corpus gjenstår)
+- [~] Gruppe-basert tilgang for GUI-kommandoer (`AccessControl` klar)
 
-Se [docs/WINUI3_ARCHITECTURE.md](docs/WINUI3_ARCHITECTURE.md) for arkitekturvurdering.
+## Nye komponenter
+
+| Komponent | Fil |
+|-----------|-----|
+| DNS-beriking | `src/core/DnsEnricher.*` |
+| App-prompt | `src/core/AppPromptHandler.*` |
+| WinUI 3-skeleton | `gui-winui/` |
