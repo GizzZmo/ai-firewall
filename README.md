@@ -12,18 +12,8 @@
 - [x] Modellversjonering + signert modellfil, hot-reload av modell
 - [~] DNS-oppslag i loggen (`DnsResolver` + `FirewallEventExt` klar; full integrasjon i DecisionCoordinator gjenstår)
 - [~] Per-app-statistikk og "spør brukeren"-dialog (`AppStats` + IPC-meldingstype klar; GUI-dialog gjenstår)
-- [ ] WinUI 3-variant av GUI-et, MSIX/WiX-installer med signering
+- [~] WinUI 3-variant av GUI-et (arkitektur vurdert i docs/WINUI3_ARCHITECTURE.md; implementasjon gjenstår)
 - [~] Fuzzing av pakkeparseren (forbedret fuzzer med IPv4/IPv6 + extension headers; kjøring med corpus gjenstår)
 - [~] Gruppe-basert tilgang for GUI-kommandoer (`AccessControl` med LookupAccountName klar)
 
-Se [docs/INTEGRATION_NOTES.md](docs/INTEGRATION_NOTES.md) og [docs/ROADMAP_PROGRESS.md](docs/ROADMAP_PROGRESS.md).
-
-## Nye filer
-
-| Fil | Formål |
-|-----|--------|
-| `src/core/FirewallEventExt.hpp` | DNS-host + app-prompt IPC |
-| `fuzz/packet_parser_fuzzer.cpp` | Forbedret libFuzzer-target |
-| `docs/INTEGRATION_NOTES.md` | Integrasjonsveiledning |
-| `docs/WINDOWS_ACCESS_CONTROL.md` | Access Control-dokumentasjon |
-| `docs/ACL_REPLICATION.md` | ACL-replikering |
+Se [docs/WINUI3_ARCHITECTURE.md](docs/WINUI3_ARCHITECTURE.md) for arkitekturvurdering.
