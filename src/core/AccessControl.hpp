@@ -1,13 +1,18 @@
 #pragma once
 
 #include <string>
-#include <vector>
 #include <unordered_set>
+#include <vector>
 
 namespace aifw {
 
 // Gruppe-basert tilgang for GUI-kommandoer.
-// I stedet for «kun administrator» kan man tillate spesifikke grupper.
+// Bruker Windows Access Token + CheckTokenMembership (korrekt måte).
+//
+// Viktig:
+// - CheckTokenMembership sjekker at SID er *enabled* i tokenet
+// - UAC-filtrerte tokens har Administrators som deny-only – da returnerer den false
+// - For egendefinerte grupper: LookupAccountName → SID → CheckTokenMembership
 enum class GuiCommand {
     ViewLogs,
     ToggleLearning,
@@ -22,22 +27,26 @@ class AccessControl {
 public:
     AccessControl();
 
-    // Sjekk om gjeldende bruker (eller oppgitt gruppe) får utføre kommandoen.
-    // På Windows: sjekk token-grupper. Her: enkel konfigurasjon.
     bool isAllowed(GuiCommand cmd) const;
 
-    // Legg til en gruppe som får lov (f.eks. "Administrators", "AiFirewallUsers")
-    void allowGroup(const std::string& groupName);
+    // Legg til en gruppe ved navn (f.eks. "Administrators", "AiFirewallUsers")
+    // Gruppen må eksistere på maskinen / i domenet.
+    bool allowGroup(const std::string& groupName);
 
-    // Standard: bare Administrators
     void setRequireAdmin(bool require);
+
+    // Hjelpefunksjoner
+    bool isCurrentUserAdmin() const;
+    bool isCurrentUserInGroup(const std::string& groupName) const;
+
+    // List alle grupper i gjeldende token (for debugging)
+    std::vector<std::string> listCurrentGroups() const;
 
 private:
     bool requireAdmin_{true};
     std::unordered_set<std::string> allowedGroups_;
 
-    bool currentUserIsAdmin() const;
-    bool currentUserInGroup(const std::string& group) const;
+    bool checkSidMembership(void* sid) const;
 };
 
 } // namespace aifw
