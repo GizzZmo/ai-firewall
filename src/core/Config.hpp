@@ -47,6 +47,7 @@ struct WinDivertConfig {
     std::size_t batchSize{16};      // pakker per WinDivertRecvEx
     std::size_t workerThreads{2};
     bool trackProcesses{true};      // eget FLOW-lag-håndtak for prosess-ID/app-sti
+    bool injectRejectOnBlock{true}; // send TCP RST / ICMP unreachable ved blokkering
 };
 
 struct WfpConfig {
