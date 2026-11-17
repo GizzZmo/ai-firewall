@@ -84,6 +84,7 @@ Config Config::fromJson(const json& j) {
         read(a, "batch_size", c.windivert.batchSize);
         read(a, "worker_threads", c.windivert.workerThreads);
         read(a, "track_processes", c.windivert.trackProcesses);
+        read(a, "inject_reject_on_block", c.windivert.injectRejectOnBlock);
     }
     if (j.contains("wfp")) {
         const auto& a = j["wfp"];
@@ -167,7 +168,8 @@ json Config::toJson() const {
           {"queue_size_bytes", windivert.queueSizeBytes},
           {"batch_size", windivert.batchSize},
           {"worker_threads", windivert.workerThreads},
-          {"track_processes", windivert.trackProcesses}}},
+          {"track_processes", windivert.trackProcesses},
+          {"inject_reject_on_block", windivert.injectRejectOnBlock}}},
         {"wfp",
          {{"enabled", wfp.enabled},
           {"persist_ai_blocks", wfp.persistAiBlocks},
