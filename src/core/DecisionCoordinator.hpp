@@ -18,6 +18,7 @@
 #include "AIDecisionEngine.hpp"
 #include "Config.hpp"
 #include "FlowTracker.hpp"
+#include "GeoIpLookup.hpp"
 #include "HostTracker.hpp"
 #include "LearningMode.hpp"
 #include "Notifier.hpp"
@@ -50,10 +51,10 @@ struct CoordinatorStats {
 class DecisionCoordinator {
 public:
     /// Ikke-eiende referanser: eierskapet ligger i FirewallService (lever lengre enn denne).
-    /// ai og sink kan være nullptr (AI avslått / ingen WFP).
+    /// ai og sink kan være nullptr (AI avslått / ingen WFP). geoip kan være nullptr.
     DecisionCoordinator(const Config& cfg, RuleEngine& rules, FlowTracker& flows, HostTracker& hosts,
                         VerdictCache& cache, AIDecisionEngine* ai, LearningMode& learning, INotifier& notifier,
-                        IPersistentRuleSink* sink = nullptr);
+                        IPersistentRuleSink* sink = nullptr, GeoIpLookup* geoip = nullptr);
     ~DecisionCoordinator();
     DecisionCoordinator(const DecisionCoordinator&) = delete;
     DecisionCoordinator& operator=(const DecisionCoordinator&) = delete;
@@ -72,6 +73,7 @@ private:
     void onInference(const InferenceResult& r, const MatchContext& ctx);
     bool markPending(const FlowKey& k);
     void clearPending(const FlowKey& k);
+    void enrichEvent(FirewallEvent& ev, const FlowKey& key) const;
 
     const Config& cfg_;
     RuleEngine& rules_;
@@ -82,6 +84,7 @@ private:
     LearningMode& learning_;
     INotifier& notifier_;
     IPersistentRuleSink* sink_;
+    GeoIpLookup* geoip_;
 
     std::mutex pendingMutex_;
     std::unordered_set<FlowKey, FlowKeyHash> pending_;  // flyter med inferens underveis
