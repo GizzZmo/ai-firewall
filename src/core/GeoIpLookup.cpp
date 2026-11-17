@@ -1,5 +1,7 @@
 #include "GeoIpLookup.hpp"
 
+#include <cstring>
+
 #include <spdlog/spdlog.h>
 
 #ifdef AIFW_WITH_GEOIP
@@ -57,10 +59,9 @@ GeoIpLookup& GeoIpLookup::operator=(GeoIpLookup&& other) noexcept {
 std::string GeoIpLookup::country(const IpAddress& ip) const {
     if (!available_ || !impl_ || !impl_->open || !ip.isValid()) return {};
 
-    int gai_error = 0, mmdb_error = 0;
+    int mmdb_error = 0;
     MMDB_lookup_result_s result{};
     if (ip.version == 4) {
-        // IPv4: de første 4 bytene er i nettverksrekkefølge
         sockaddr_in sa{};
         sa.sin_family = AF_INET;
         std::memcpy(&sa.sin_addr, ip.bytes.data(), 4);
@@ -87,8 +88,20 @@ struct GeoIpLookup::Impl {};
 
 GeoIpLookup::GeoIpLookup(const std::string&) {}
 GeoIpLookup::~GeoIpLookup() = default;
-GeoIpLookup::GeoIpLookup(GeoIpLookup&&) noexcept = default;
-GeoIpLookup& GeoIpLookup::operator=(GeoIpLookup&&) noexcept = default;
+GeoIpLookup::GeoIpLookup(GeoIpLookup&& other) noexcept : impl_(other.impl_), available_(other.available_) {
+    other.impl_ = nullptr;
+    other.available_ = false;
+}
+GeoIpLookup& GeoIpLookup::operator=(GeoIpLookup&& other) noexcept {
+    if (this != &other) {
+        delete impl_;
+        impl_ = other.impl_;
+        available_ = other.available_;
+        other.impl_ = nullptr;
+        other.available_ = false;
+    }
+    return *this;
+}
 
 std::string GeoIpLookup::country(const IpAddress&) const { return {}; }
 
