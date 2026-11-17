@@ -24,11 +24,12 @@ FirewallCore::FirewallCore(Config cfg, std::filesystem::path baseDir, std::uniqu
     recent_ = recent.get();
     notifier_.add(std::move(recent));
 
+    exporter_ = std::make_unique<FlowExporter>(resolve("data/flows_export.jsonl"));
+
     try {
         rules_.loadFromFile(resolve(cfg_.rulesPath));
         spdlog::info("Lastet {} regler fra {}", rules_.size(), resolve(cfg_.rulesPath).string());
     } catch (const std::exception& e) {
-        // Fail-safe: uten regelfil kjører vi med tomt regelsett og standardverdikt.
         spdlog::error("Kunne ikke laste regler: {} – fortsetter uten eksplisitte regler", e.what());
     }
     try {
@@ -53,7 +54,8 @@ void FirewallCore::stop() {
         housekeeper_.request_stop();
         housekeeper_.join();
     }
-    if (ai_) ai_->stop();  // kjører gjenværende callbacks mens coordinator_ lever
+    if (ai_) ai_->stop();
+    if (exporter_) exporter_->flush();
     try {
         if (learning_.enabled() || !learning_.snapshot().empty()) learning_.save(resolve(cfg_.learningPath));
     } catch (const std::exception& e) {
@@ -84,7 +86,9 @@ void FirewallCore::startHousekeeping(std::chrono::milliseconds interval) {
 }
 
 void FirewallCore::housekeeping(TimePoint now) {
-    const auto removed = flows_.expire(now);
+    const auto removed = flows_.expire(now, [this](const FlowKey& k, const FlowStats& s) {
+        if (exporter_) exporter_->onExpired(k, s);
+    });
     if (removed) spdlog::debug("Fjernet {} utløpte flyter ({} aktive)", removed, flows_.size());
     hosts_.expire(now);
     if (learning_.enabled() && now - lastLearningSave_ > std::chrono::minutes(1)) {
@@ -95,8 +99,22 @@ void FirewallCore::housekeeping(TimePoint now) {
 
 void FirewallCore::reloadRules() {
     rules_.loadFromFile(resolve(cfg_.rulesPath));
-    coordinator_->invalidateCache();  // gamle verdikter kan være i strid med nye regler
+    coordinator_->invalidateCache();
     spdlog::info("Regler lastet på nytt: {} regler", rules_.size());
+}
+
+void FirewallCore::reloadModel() {
+    if (!ai_ || !cfg_.ai.enabled) {
+        spdlog::warn("Kan ikke laste modell på nytt: AI er ikke aktiv");
+        return;
+    }
+    try {
+        auto newModel = createModel(cfg_.ai, baseDir_);
+        ai_->setModel(std::move(newModel));  // antar at AIDecisionEngine har setModel
+        spdlog::info("Modell lastet på nytt: {}", cfg_.ai.modelPath);
+    } catch (const std::exception& e) {
+        spdlog::error("Feil ved reload av modell: {}", e.what());
+    }
 }
 
 json FirewallCore::statusJson() const {
@@ -113,7 +131,8 @@ json FirewallCore::statusJson() const {
            {"cache_hits", s.cacheHits},
            {"ai_submitted", s.aiSubmitted},
            {"fail_safe", s.failSafe},
-           {"would_block", s.wouldBlock}};
+           {"would_block", s.wouldBlock},
+           {"host_blocks", s.hostBlocks}};
     if (ai_) {
         const auto a = ai_->stats();
         j["ai"] = {{"model", ai_->modelName()}, {"healthy", a.healthy},     {"queue_depth", a.queueDepth},
@@ -160,6 +179,10 @@ json FirewallCore::handleCommand(const json& msg, bool clientIsAdmin) {
         if (cmd == "reload_rules") {
             reloadRules();
             return ipc::makeReply(cmd, true, {{"rules", rules_.size()}});
+        }
+        if (cmd == "reload_model") {
+            reloadModel();
+            return ipc::makeReply(cmd, true, {{"model", cfg_.ai.modelPath}});
         }
     } catch (const std::exception& e) {
         return ipc::makeError(cmd, e.what());
