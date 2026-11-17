@@ -16,6 +16,7 @@ option(AIFW_WITH_ONNX     "Bruk ONNX Runtime for AI-inferens"                 ${
 option(AIFW_WITH_GEOIP    "Bruk MaxMind GeoLite2 via libmaxminddb"            ON)
 option(AIFW_FETCH_DEPS    "Hent spdlog/nlohmann_json/GoogleTest med FetchContent hvis de ikke finnes" ON)
 option(AIFW_WARNINGS_AS_ERRORS "Behandle advarsler som feil"                  OFF)
+option(AIFW_SANITIZE      "Aktiver AddressSanitizer og UBSan"                 OFF)
 
 set(WINDIVERT_DIR   "" CACHE PATH "Rotmappe for utpakket WinDivert 2.2.x (inneholder include/ og x64/)")
 set(ONNXRUNTIME_DIR "" CACHE PATH "Rotmappe for ONNX Runtime (include/ og lib/) hvis ikke via vcpkg")
@@ -30,10 +31,10 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
-include(Dependencies)  # cmake/Dependencies.cmake
+include(Dependencies)
 
 # ---------------------------------------------------------------------------
-# Felles kompilatorvalg som INTERFACE-target (ingen globale flagg)
+# Felles kompilatorvalg
 # ---------------------------------------------------------------------------
 add_library(aifw_options INTERFACE)
 add_library(aifw::options ALIAS aifw_options)
@@ -45,15 +46,20 @@ if(MSVC)
 else()
     target_compile_options(aifw_options INTERFACE -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion
         $<$<BOOL:${AIFW_WARNINGS_AS_ERRORS}>:-Werror>)
-    if(WIN32)  # MinGW/clang på Windows
+    if(AIFW_SANITIZE)
+        target_compile_options(aifw_options INTERFACE -fsanitize=address,undefined -fno-omit-frame-pointer)
+        target_link_options(aifw_options INTERFACE -fsanitize=address,undefined)
+    endif()
+    if(WIN32)
         target_compile_definitions(aifw_options INTERFACE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
     endif()
 endif()
 
 # ---------------------------------------------------------------------------
-# Kjernebibliotek
+# Kjernebibliotek – plattformuavhengig
 # ---------------------------------------------------------------------------
 add_library(aifw_core STATIC
+    # Kjerne
     src/core/Types.cpp
     src/core/Entropy.cpp
     src/core/FeatureExtractor.cpp
@@ -72,6 +78,14 @@ add_library(aifw_core STATIC
     src/core/Log.cpp
     src/core/FirewallCore.cpp
     src/core/GeoIpLookup.cpp
+    # DNS
+    src/core/DnsResolver.cpp
+    src/core/DnsEnricher.cpp
+    src/core/DnsParser.cpp
+    src/core/DohClient.cpp
+    # App-statistikk og prompts
+    src/core/AppStats.cpp
+    src/core/AppPromptHandler.cpp
 )
 add_library(aifw::core ALIAS aifw_core)
 target_include_directories(aifw_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
@@ -90,14 +104,21 @@ if(AIFW_WITH_GEOIP)
     target_link_libraries(aifw_core PUBLIC maxminddb::maxminddb)
 endif()
 
+# ---------------------------------------------------------------------------
+# Windows-spesifikke filer
+# ---------------------------------------------------------------------------
 if(WIN32)
     target_sources(aifw_core PRIVATE
         src/core/FeatureExtractorWin.cpp
         src/core/PacketEngine.cpp
         src/core/ProcessResolver.cpp
         src/core/WfpManager.cpp
-        src/core/WinUtil.cpp)
-    target_link_libraries(aifw_core PUBLIC WinDivert::WinDivert fwpuclnt ws2_32 rpcrt4 advapi32)
+        src/core/WinUtil.cpp
+        src/core/AccessControl.cpp
+        src/core/CredentialStore.cpp
+        src/core/DotClient.cpp
+        src/core/SchannelTls.cpp)
+    target_link_libraries(aifw_core PUBLIC WinDivert::WinDivert fwpuclnt ws2_32 rpcrt4 advapi32 secur32 crypt32 winhttp)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -114,10 +135,9 @@ if(AIFW_BUILD_SERVICE)
         src/service/WfpRuleSink.cpp)
     target_link_libraries(aifw_service PRIVATE aifw::core aifw::options)
     if(MSVC)
-        # Krever administrator ved oppstart (UAC-manifest).
         target_link_options(aifw_service PRIVATE "/MANIFESTUAC:level='requireAdministrator' uiAccess='false'")
     else()
-        target_link_options(aifw_service PRIVATE -municode)  # MinGW/clang: wmain som inngangspunkt
+        target_link_options(aifw_service PRIVATE -municode)
     endif()
     aifw_copy_runtime_files(aifw_service)
 endif()
@@ -132,7 +152,8 @@ if(AIFW_BUILD_GUI)
         src/gui/main.cpp
         src/gui/TrayApp.cpp src/gui/TrayApp.hpp
         src/gui/ServiceClient.cpp src/gui/ServiceClient.hpp
-        src/gui/LogWindow.cpp src/gui/LogWindow.hpp)
+        src/gui/LogWindow.cpp src/gui/LogWindow.hpp
+        src/gui/SettingsDialog.cpp src/gui/SettingsDialog.hpp)
     target_link_libraries(aifw_gui PRIVATE Qt6::Widgets Qt6::Network aifw::options)
 endif()
 
