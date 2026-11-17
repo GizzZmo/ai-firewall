@@ -57,6 +57,7 @@ add_library(aifw_core STATIC
     src/core/Entropy.cpp
     src/core/FeatureExtractor.cpp
     src/core/FlowTracker.cpp
+    src/core/HostTracker.cpp
     src/core/RuleEngine.cpp
     src/core/Config.cpp
     src/core/VerdictCache.cpp
