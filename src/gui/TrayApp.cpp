@@ -8,6 +8,7 @@
 
 #include "LogWindow.hpp"
 #include "ServiceClient.hpp"
+#include "SettingsDialog.hpp"
 
 TrayApp::TrayApp(const QString& pipeName, QObject* parent)
     : QObject(parent), client_(new ServiceClient(pipeName, this)), menu_(new QMenu) {
@@ -21,6 +22,10 @@ TrayApp::TrayApp(const QString& pipeName, QObject* parent)
         if (!updatingToggle_) client_->setLearningMode(on);
     });
     menu_->addAction(tr("Vis logg …"), this, &TrayApp::showLog);
+    menu_->addAction(tr("AI-innstillinger …"), this, [this]() {
+        SettingsDialog dlg(client_);
+        dlg.exec();
+    });
     menu_->addAction(tr("Last regler på nytt"), client_, &ServiceClient::reloadRules);
     menu_->addSeparator();
     menu_->addAction(tr("Avslutt GUI"), qApp, &QApplication::quit);
@@ -35,19 +40,21 @@ TrayApp::TrayApp(const QString& pipeName, QObject* parent)
     connect(client_, &ServiceClient::eventReceived, this, &TrayApp::onEvent);
     connect(client_, &ServiceClient::statusReceived, this, &TrayApp::onStatus);
     connect(client_, &ServiceClient::replyReceived, this, [this](const QString& cmd, const QJsonObject&) {
-        if (cmd == "set_learning") client_->requestStatus();
+        if (cmd == "set_learning" || cmd == "set_ai_config") client_->requestStatus();
     });
     connect(client_, &ServiceClient::errorReceived, this, [this](const QString& cmd, const QString& msg) {
         if (cmd == "set_learning") {
-            client_->requestStatus();  // tilbakestill bryteren til faktisk tilstand
+            client_->requestStatus();
             tray_.showMessage(tr("AI-Firewall"), tr("Kunne ikke endre læringsmodus: %1").arg(msg),
+                              QSystemTrayIcon::Warning, 5000);
+        } else if (cmd == "set_ai_config") {
+            tray_.showMessage(tr("AI-Firewall"), tr("Kunne ikke lagre AI-innstillinger: %1").arg(msg),
                               QSystemTrayIcon::Warning, 5000);
         }
     });
 
     statusTimer_.setInterval(5000);
     connect(&statusTimer_, &QTimer::timeout, client_, &ServiceClient::requestStatus);
-    // Varsler samles i 3 s-vinduer så en flom av blokkeringer ikke gir en flom av toasts.
     notifyTimer_.setInterval(3000);
     notifyTimer_.setSingleShot(true);
     connect(&notifyTimer_, &QTimer::timeout, this, &TrayApp::flushNotifications);
@@ -63,7 +70,6 @@ TrayApp::~TrayApp() {
 }
 
 QIcon TrayApp::makeIcon(const QColor& color) {
-    // Tegnet skjold, slik at vi ikke trenger ressursfiler.
     QPixmap pm(64, 64);
     pm.fill(Qt::transparent);
     QPainter p(&pm);
