@@ -11,26 +11,26 @@ Et **Qt 6**-ikon i system tray viser blokkeringer, logg og lar deg slå lærings
 
 | Komponent | Teknologi | Fil(er) |
 |---|---|---|
-| Pakkeavskjæring | WinDivert 2.2 (signert driver + user-mode API) | `src/core/PacketEngine.*` |
+| Pakkeavskjæring | WinDivert 2.2 | `src/core/PacketEngine.*` |
 | Prosess/app per flyt | WinDivert FLOW-lag | `src/core/ProcessResolver.*` |
-| Persistente regler | WFP (`FwpmEngineOpen0`, egen provider/sublayer, `FwpmFilterAdd0`) | `src/core/WfpManager.*` |
-| Flytsporing | 5-tuple-tabell, tidsavbrudd, Welford-statistikk | `src/core/FlowTracker.*` |
-| TCP State Machine | RFC 793-tilstander (SYN_SENT → ESTABLISHED → TIME_WAIT) | `src/core/TcpStateMachine.*` |
-| Vertsnivå-deteksjon | Sliding window per remote-IP (unike porter, nye flyter, SYN) | `src/core/HostTracker.*` |
-| Flyt-eksport | Anonymisert JSONL av utløpte flyter for ML-trening | `src/core/FlowExporter.*` |
-| GeoIP | MaxMind GeoLite2 via libmaxminddb (valgfri) | `src/core/GeoIpLookup.*` |
-| DNS reverse | `getnameinfo` + cache | `src/core/DnsResolver.*` |
-| Features | Egen IPv4/IPv6/TCP/UDP-parser + `WinDivertHelperParsePacket`, Shannon-entropi | `src/core/FeatureExtractor.*`, `Entropy.*` |
-| KI-inferens | ONNX Runtime, trådpool, batching, terskler, circuit breaker | `src/core/AIDecisionEngine.*`, `OnnxModel.cpp` |
-| Regelmotor | JSON-regler: app, port(-område), IP/CIDR (v4/v6), retning, protokoll | `src/core/RuleEngine.*` |
-| Beslutning | Regel → cache → host → standard + asynkron AI, læringsmodus, fail-safe | `src/core/DecisionCoordinator.*` |
-| Reject-injeksjon | TCP RST (IPv4/IPv6 + extension headers) + ICMP/ICMPv6 Port Unreachable | `src/core/TcpResetInjector.*` |
-| Læringsmodus | Registrerer trafikk, foreslår regler | `src/core/LearningMode.*` |
-| Tjeneste | Windows-tjeneste, admin-sjekk, konsollmodus | `src/service/*` |
-| IPC | Named pipe `\\\\.\\pipe\\aifw`, JSON Lines | `src/core/IpcProtocol.*`, `src/service/PipeServer.*` |
-| GUI | Qt 6 system tray, varsler, logg, læringsbryter | `src/gui/*` |
-| Logging | spdlog (konsoll + roterende fil) | `src/core/Log.*` |
-| ML-pipeline | Python, scikit-learn → skl2onnx → verifisering | `ml/` |
+| Persistente regler | WFP | `src/core/WfpManager.*` |
+| Flytsporing | 5-tuple + Welford | `src/core/FlowTracker.*` |
+| TCP State Machine | RFC 793 | `src/core/TcpStateMachine.*` |
+| Vertsnivå-deteksjon | Sliding window | `src/core/HostTracker.*` |
+| Flyt-eksport | Anonymisert JSONL | `src/core/FlowExporter.*` |
+| GeoIP | MaxMind GeoLite2 | `src/core/GeoIpLookup.*` |
+| DNS reverse | getnameinfo + cache | `src/core/DnsResolver.*` |
+| Features | IPv4/IPv6/TCP/UDP + entropi | `src/core/FeatureExtractor.*` |
+| KI-inferens | ONNX Runtime | `src/core/AIDecisionEngine.*` |
+| Regelmotor | JSON-regler | `src/core/RuleEngine.*` |
+| Beslutning | Regel → cache → host → AI | `src/core/DecisionCoordinator.*` |
+| Reject-injeksjon | TCP RST + ICMP | `src/core/TcpResetInjector.*` |
+| Læringsmodus | Foreslår regler | `src/core/LearningMode.*` |
+| Tjeneste | Windows Service | `src/service/*` |
+| IPC | Named pipe | `src/core/IpcProtocol.*` |
+| GUI | Qt 6 system tray | `src/gui/*` |
+| Logging | spdlog | `src/core/Log.*` |
+| ML-pipeline | Python → ONNX | `ml/` |
 
 ## Veikart
 
@@ -46,4 +46,4 @@ Et **Qt 6**-ikon i system tray viser blokkeringer, logg og lar deg slå lærings
 - [ ] Fuzzing av pakkeparseren (libFuzzer) og ETW-logging
 - [ ] Gruppe-basert tilgang for GUI-kommandoer (i stedet for kun administrator)
 
-*(Full README beholdt – kun veikart og komponenttabell oppdatert i denne committen. Se tidligere versjon for komplett innhold.)*
+Se docs/ for mer detaljer (ARCHITECTURE.md, SECURITY.md, TCP_STATE_MACHINE.md, TCP_TIMEOUTS.md, DNS_RESOLVER.md).
