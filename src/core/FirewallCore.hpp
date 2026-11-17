@@ -11,6 +11,7 @@
 #include "AIDecisionEngine.hpp"
 #include "Config.hpp"
 #include "DecisionCoordinator.hpp"
+#include "FlowExporter.hpp"
 #include "FlowTracker.hpp"
 #include "HostTracker.hpp"
 #include "LearningMode.hpp"
@@ -42,6 +43,7 @@ public:
 
     void addNotifier(std::unique_ptr<INotifier> n) { notifier_.add(std::move(n)); }
     void reloadRules();
+    void reloadModel();
 
     [[nodiscard]] const Config& config() const noexcept { return cfg_; }
     [[nodiscard]] RuleEngine& rules() noexcept { return rules_; }
@@ -63,6 +65,7 @@ private:
     HostTracker hosts_;
     VerdictCache cache_;
     LearningMode learning_;
+    std::unique_ptr<FlowExporter> exporter_;
     std::unique_ptr<AIDecisionEngine> ai_;
     std::unique_ptr<DecisionCoordinator> coordinator_;  // etter ai_: destrueres før ai_
     TimePoint lastLearningSave_{Clock::now()};
