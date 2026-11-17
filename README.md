@@ -10,16 +10,17 @@
 - [x] TCP State Machine (RFC 793-tilstander integrert i feature extraction)
 - [x] Eksport av ekte flyter fra tjenesten (anonymisert) for trening på egen trafikk
 - [x] Modellversjonering + signert modellfil, hot-reload av modell
-- [~] DNS-oppslag i loggen (`DnsEnricher` klar; full integrasjon i DecisionCoordinator gjenstår)
-- [~] Per-app-statistikk og "spør brukeren"-dialog (`AppPromptHandler` klar; GUI-dialog gjenstår)
+- [x] DNS-oppslag i loggen (`DnsEnricher` integrert i `DecisionCoordinator`)
+- [x] Per-app-statistikk og "spør brukeren"-dialog (`AppPromptHandler` + `AppStats` integrert; GUI-dialog gjenstår)
 - [~] WinUI 3-variant av GUI-et (skeleton i `gui-winui/`; full implementasjon gjenstår)
 - [~] Fuzzing av pakkeparseren (forbedret fuzzer; kjøring med corpus gjenstår)
-- [~] Gruppe-basert tilgang for GUI-kommandoer (`AccessControl` klar)
+- [x] Gruppe-basert tilgang for GUI-kommandoer (`AccessControl` klar)
 
-## Nye komponenter
+## Integrasjon
 
-| Komponent | Fil |
-|-----------|-----|
-| DNS-beriking | `src/core/DnsEnricher.*` |
-| App-prompt | `src/core/AppPromptHandler.*` |
-| WinUI 3-skeleton | `gui-winui/` |
+`DecisionCoordinator` tar nå valgfrie pekere til:
+- `DnsEnricher*` – beriker hendelser med hostname
+- `AppPromptHandler*` – sender «spør brukeren»-melding
+- `AppStats*` – tracker pakker/bytes per app
+
+Alle er `nullptr` som standard (bakoverkompatibelt).
