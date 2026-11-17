@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build release binaries
+    runs-on: windows-2022
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup vcpkg
+        shell: pwsh
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git $env:GITHUB_WORKSPACE\vcpkg
+          .\vcpkg\bootstrap-vcpkg.bat
+
+      - name: Download WinDivert
+        shell: pwsh
+        run: |
+          Invoke-WebRequest `
+            https://github.com/basil00/WinDivert/releases/download/v2.2.2/WinDivert-2.2.2-A.zip `
+            -OutFile wd.zip
+          Expand-Archive wd.zip -DestinationPath third_party
+          "WINDIVERT_DIR=$PWD\third_party\WinDivert-2.2.2-A" | Out-File -Append $env:GITHUB_ENV
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake --preset windows-vcpkg `
+            -DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON `
+            -DVCPKG_MANIFEST_FEATURES=onnx `
+            -DAIFW_BUILD_GUI=OFF
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build --preset windows-release
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          $tag = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "manual" }
+          if (Test-Path .\build\windows-release) {
+            Compress-Archive `
+              -Path .\build\windows-release\* `
+              -DestinationPath ".\release\ai-firewall-$tag-windows.zip" `
+              -Force
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-firewall-release-${{ github.ref_name }}
+          path: release/*.zip
+          if-no-files-found: warn
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.zip
+          generate_release_notes: true
