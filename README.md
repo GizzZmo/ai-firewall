@@ -10,21 +10,20 @@
 - [x] TCP State Machine (RFC 793-tilstander integrert i feature extraction)
 - [x] Eksport av ekte flyter fra tjenesten (anonymisert) for trening på egen trafikk
 - [x] Modellversjonering + signert modellfil, hot-reload av modell
-- [~] DNS-oppslag i loggen (`DnsResolver` klar; integrasjonseksempel i docs/ROADMAP_PROGRESS.md)
-- [~] Per-app-statistikk og "spør brukeren"-dialog (`AppStats` klar; GUI-dialog gjenstår)
+- [~] DNS-oppslag i loggen (`DnsResolver` + `FirewallEventExt` klar; full integrasjon i DecisionCoordinator gjenstår)
+- [~] Per-app-statistikk og "spør brukeren"-dialog (`AppStats` + IPC-meldingstype klar; GUI-dialog gjenstår)
 - [ ] WinUI 3-variant av GUI-et, MSIX/WiX-installer med signering
-- [~] Fuzzing av pakkeparseren (libFuzzer-skeleton i `fuzz/`; kjøring gjenstår)
-- [~] Gruppe-basert tilgang for GUI-kommandoer (`AccessControl` klar; full Windows-gruppe-oppslag gjenstår)
+- [~] Fuzzing av pakkeparseren (forbedret fuzzer med IPv4/IPv6 + extension headers; kjøring med corpus gjenstår)
+- [~] Gruppe-basert tilgang for GUI-kommandoer (`AccessControl` med LookupAccountName klar)
 
-Se [docs/ROADMAP_PROGRESS.md](docs/ROADMAP_PROGRESS.md) for integrasjonseksempler.
+Se [docs/INTEGRATION_NOTES.md](docs/INTEGRATION_NOTES.md) og [docs/ROADMAP_PROGRESS.md](docs/ROADMAP_PROGRESS.md).
 
-## Komponenter (utvalg)
+## Nye filer
 
-| Komponent | Fil |
-|-----------|-----|
-| DNS reverse | `src/core/DnsResolver.*` |
-| Per-app-statistikk | `src/core/AppStats.*` |
-| Tilgangskontroll | `src/core/AccessControl.*` |
-| Fuzzing | `fuzz/packet_parser_fuzzer.cpp` |
-
-Full dokumentasjon og arkitektur finnes i tidligere commits og i `docs/`.
+| Fil | Formål |
+|-----|--------|
+| `src/core/FirewallEventExt.hpp` | DNS-host + app-prompt IPC |
+| `fuzz/packet_parser_fuzzer.cpp` | Forbedret libFuzzer-target |
+| `docs/INTEGRATION_NOTES.md` | Integrasjonsveiledning |
+| `docs/WINDOWS_ACCESS_CONTROL.md` | Access Control-dokumentasjon |
+| `docs/ACL_REPLICATION.md` | ACL-replikering |
