@@ -17,15 +17,16 @@ std::string_view toString(DecisionSource s) noexcept {
         case DecisionSource::AiPending: return "ai_pending";
         case DecisionSource::FailSafe: return "failsafe";
         case DecisionSource::Learning: return "learning";
+        case DecisionSource::Host: return "host";
         default: return "invalid";
     }
 }
 
-DecisionCoordinator::DecisionCoordinator(const Config& cfg, RuleEngine& rules, FlowTracker& flows, VerdictCache& cache,
-                                         AIDecisionEngine* ai, LearningMode& learning, INotifier& notifier,
-                                         IPersistentRuleSink* sink)
-    : cfg_(cfg), rules_(rules), flows_(flows), cache_(cache), ai_(ai), learning_(learning), notifier_(notifier),
-      sink_(sink) {}
+DecisionCoordinator::DecisionCoordinator(const Config& cfg, RuleEngine& rules, FlowTracker& flows, HostTracker& hosts,
+                                         VerdictCache& cache, AIDecisionEngine* ai, LearningMode& learning,
+                                         INotifier& notifier, IPersistentRuleSink* sink)
+    : cfg_(cfg), rules_(rules), flows_(flows), hosts_(hosts), cache_(cache), ai_(ai), learning_(learning),
+      notifier_(notifier), sink_(sink) {}
 
 DecisionCoordinator::~DecisionCoordinator() {
     // AI-callbacks refererer til `this`. Eieren skal stoppe AIDecisionEngine først, men
@@ -86,7 +87,35 @@ Decision DecisionCoordinator::decide(const PacketInfo& pkt, TimePoint now) {
         return finish({cfg_.defaultVerdict, DecisionSource::FailSafe, {}});
     }
 
-    // 3) Asynkron AI. Kun når flyten har nok pakker til meningsfulle features, og
+    // 3) Vertsnivå-deteksjon (kun på første pakke i ny flyt).
+    if (stats->totalPackets() == 1) {
+        const bool isSyn = (pkt.protocol == Protocol::TCP) && (pkt.tcpFlags & tcpflags::SYN) &&
+                           !(pkt.tcpFlags & tcpflags::ACK);
+        if (hosts_.onNewFlow(key, now, isSyn)) {
+            hostBlocks_.fetch_add(1, std::memory_order_relaxed);
+            FirewallEvent ev;
+            ev.type = learning_.enabled() ? EventType::WouldBlock : EventType::Blocked;
+            ev.flow = key.toString();
+            ev.app = ctx.appPath;
+            ev.reason = "host";
+            ev.message = learning_.enabled() ? "Vertsnivå-alarm (læringsmodus)" : "Blokkert av vertsnivå-detektor";
+            notifier_.notify(ev);
+            if (!learning_.enabled()) {
+                // Cache blokkeringen slik at senere pakker i samme flyt også stoppes.
+                cache_.put(key, Verdict::Block, 1.0, now + cfg_.cache.blockTtl);
+                if (sink_ && cfg_.wfp.persistAiBlocks) {
+                    try {
+                        sink_->persistBlock(key, ctx.appPath, "host scan/brute");
+                    } catch (const std::exception& e) {
+                        spdlog::error("kunne ikke lagre persistent host-blokkering: {}", e.what());
+                    }
+                }
+                return finish({Verdict::Block, DecisionSource::Host, {}});
+            }
+        }
+    }
+
+    // 4) Asynkron AI. Kun når flyten har nok pakker til meningsfulle features, og
     //    re-evaluer med jevne mellomrom for lange flyter.
     if (ai_ && cfg_.ai.enabled) {
         const bool healthy = ai_->healthy();
@@ -171,7 +200,7 @@ void DecisionCoordinator::onInference(const InferenceResult& r, const MatchConte
 
 CoordinatorStats DecisionCoordinator::stats() const noexcept {
     return {packets_.load(), allowed_.load(),     blocked_.load(),  ruleHits_.load(),
-            cacheHits_.load(), aiSubmitted_.load(), failSafe_.load(), wouldBlock_.load()};
+            cacheHits_.load(), aiSubmitted_.load(), failSafe_.load(), wouldBlock_.load(), hostBlocks_.load()};
 }
 
 }  // namespace aifw
