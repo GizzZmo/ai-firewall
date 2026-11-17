@@ -9,10 +9,22 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "Types.hpp"
 
 namespace aifw {
+
+// Hash for IpAddress (trengs for unordered_map i HostTracker).
+struct IpAddressHash {
+    std::size_t operator()(const IpAddress& ip) const noexcept {
+        std::size_t h = ip.version;
+        for (std::size_t i = 0; i < ip.length(); ++i) {
+            h = h * 31 + ip.bytes[i];
+        }
+        return h;
+    }
+};
 
 struct HostTrackerConfig {
     /// Tidsvindu for telling av unike porter og nye flyter.
@@ -34,7 +46,7 @@ public:
 
     /// Registrer en ny flyt. Returnerer true hvis hosten nå er mistenkelig.
     /// `isSyn` indikerer om første pakke var TCP SYN (uten ACK).
-    [[nodiscard]] bool onNewFlow(const FlowKey& key, TimePoint now, bool isSyn) ;
+    [[nodiscard]] bool onNewFlow(const FlowKey& key, TimePoint now, bool isSyn);
 
     /// Periodisk opprydding av gamle oppføringer.
     void expire(TimePoint now);
@@ -56,7 +68,7 @@ private:
 
     HostTrackerConfig cfg_;
     mutable std::mutex mutex_;
-    std::unordered_map<IpAddress, HostStats, std::hash<IpAddress>> hosts_;
+    std::unordered_map<IpAddress, HostStats, IpAddressHash> hosts_;
 };
 
 }  // namespace aifw
