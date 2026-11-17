@@ -3,22 +3,40 @@ on: [push, pull_request]
 
 jobs:
   linux-core:
-    # Plattformuavhengig kjerne + tester (ingen WinDivert/WFP).
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y ninja-build g++-14
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build g++-14 clang-tidy cppcheck
       - run: cmake --preset linux-core -DCMAKE_CXX_COMPILER=g++-14
       - run: cmake --build --preset linux-core
       - run: ctest --preset linux-core
+      - name: Static analysis (cppcheck)
+        run: cppcheck --enable=warning,style,performance --error-exitcode=0 --suppress=missingIncludeSystem src/core/ 2>&1 | head -50
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - name: ML-pipeline (syntetiske data) + ONNX-verifisering
+      - name: ML-pipeline
         working-directory: ml
         run: |
           pip install -r requirements.txt
           python -m aifw_ml.train --flows 1500 --out out
           python -m aifw_ml.verify_onnx
+
+  linux-sanitizers:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build g++-14
+      - name: Build with sanitizers
+        run: |
+          cmake -B build-san -S . -G Ninja \
+            -DCMAKE_CXX_COMPILER=g++-14 \
+            -DAIFW_SANITIZE=ON \
+            -DAIFW_BUILD_GUI=OFF \
+            -DAIFW_WITH_ONNX=OFF \
+            -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build-san
+      - name: Run tests with sanitizers
+        run: ctest --test-dir build-san --output-on-failure
 
   windows:
     runs-on: windows-2022
