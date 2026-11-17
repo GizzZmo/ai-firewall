@@ -12,6 +12,7 @@
 #include "Config.hpp"
 #include "DecisionCoordinator.hpp"
 #include "FlowTracker.hpp"
+#include "HostTracker.hpp"
 #include "LearningMode.hpp"
 #include "Notifier.hpp"
 #include "RuleEngine.hpp"
@@ -46,6 +47,7 @@ public:
     [[nodiscard]] RuleEngine& rules() noexcept { return rules_; }
     [[nodiscard]] LearningMode& learning() noexcept { return learning_; }
     [[nodiscard]] FlowTracker& flows() noexcept { return flows_; }
+    [[nodiscard]] HostTracker& hosts() noexcept { return hosts_; }
     [[nodiscard]] DecisionCoordinator& coordinator() noexcept { return *coordinator_; }
     [[nodiscard]] AIDecisionEngine* ai() noexcept { return ai_.get(); }
     [[nodiscard]] const MemoryNotifier& recentEvents() const noexcept { return *recent_; }
@@ -58,6 +60,7 @@ private:
     MemoryNotifier* recent_{nullptr};  // eies av notifier_
     RuleEngine rules_;
     FlowTracker flows_;
+    HostTracker hosts_;
     VerdictCache cache_;
     LearningMode learning_;
     std::unique_ptr<AIDecisionEngine> ai_;
