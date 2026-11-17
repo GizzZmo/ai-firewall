@@ -51,6 +51,10 @@ public:
     /// eller circuit breaker er åpen. Callback kalles fra en arbeidertråd.
     bool submit(const FlowKey& key, const FeatureVector& features, InferenceCallback cb);
 
+    /// Bytt modell mens motoren kjører. Pågående batcher fullfører med gammel modell.
+    /// Ny modell tas i bruk for påfølgende batcher. Kaster ikke; logger ved feil.
+    void setModel(std::unique_ptr<IModel> model);
+
     /// Kan AI brukes nå? (false når circuit breaker er åpen etter gjentatte feil)
     [[nodiscard]] bool healthy() const noexcept;
     [[nodiscard]] AiStats stats() const;
@@ -70,7 +74,7 @@ private:
     void recordFailure(const std::string& what);
     void recordSuccess();
 
-    std::unique_ptr<IModel> model_;
+    std::shared_ptr<IModel> model_;  // shared for sikker bytte under kjøring
     const AiConfig cfg_;
 
     mutable std::mutex mutex_;
