@@ -86,6 +86,8 @@ struct PacketInfo {
     std::uint16_t dstPort{0};
     Protocol protocol{Protocol::Any};
     std::uint8_t tcpFlags{0};
+    std::uint32_t tcpSeq{0};
+    std::uint32_t tcpAck{0};
     std::uint8_t ttl{0};
     std::uint32_t totalLength{0};  // hele IP-pakken
     const std::uint8_t* payload{nullptr};

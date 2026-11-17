@@ -10,7 +10,8 @@ add_executable(aifw_tests
     test_learning.cpp
     test_config_ipc.cpp
     test_feature_parity.cpp
-    test_dns_parser.cpp)
+    test_dns_parser.cpp
+    test_reject.cpp)
 if(AIFW_WITH_ONNX)
     target_sources(aifw_tests PRIVATE test_onnx_model.cpp)
 endif()

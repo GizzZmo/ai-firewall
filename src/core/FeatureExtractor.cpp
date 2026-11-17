@@ -12,6 +12,11 @@ inline std::uint16_t be16(const std::uint8_t* p) noexcept {
     return static_cast<std::uint16_t>((p[0] << 8) | p[1]);
 }
 
+inline std::uint32_t be32(const std::uint8_t* p) noexcept {
+    return (static_cast<std::uint32_t>(p[0]) << 24) | (static_cast<std::uint32_t>(p[1]) << 16) |
+           (static_cast<std::uint32_t>(p[2]) << 8) | p[3];
+}
+
 // IPv6 extension headers vi kan hoppe over.
 constexpr std::uint8_t kHopByHop = 0, kRouting = 43, kFragment = 44, kDestOpts = 60, kNoNext = 59;
 
@@ -100,6 +105,8 @@ std::optional<PacketInfo> FeatureExtractor::parse(std::span<const std::uint8_t> 
             const std::uint8_t* t = d + l4Offset;
             info.srcPort = be16(t);
             info.dstPort = be16(t + 2);
+            info.tcpSeq = be32(t + 4);
+            info.tcpAck = be32(t + 8);
             const std::size_t dataOff = static_cast<std::size_t>(t[12] >> 4) * 4;
             if (dataOff < 20 || l4Offset + dataOff > ipEnd) return std::nullopt;
             info.tcpFlags = t[13];

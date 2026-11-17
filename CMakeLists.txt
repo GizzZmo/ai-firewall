@@ -78,6 +78,7 @@ add_library(aifw_core STATIC
     src/core/Log.cpp
     src/core/FirewallCore.cpp
     src/core/GeoIpLookup.cpp
+    src/core/RejectBuilder.cpp
     # DNS
     src/core/DnsResolver.cpp
     src/core/DnsEnricher.cpp

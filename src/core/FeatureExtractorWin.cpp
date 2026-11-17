@@ -41,6 +41,8 @@ std::optional<PacketInfo> FeatureExtractor::parseWinDivert(std::span<const std::
     if (tcp) {
         info.srcPort = WinDivertHelperNtohs(tcp->SrcPort);
         info.dstPort = WinDivertHelperNtohs(tcp->DstPort);
+        info.tcpSeq = tcp->SeqNum;
+        info.tcpAck = tcp->AckNum;
         // WinDivert eksponerer flaggene som bitfelt; vi pakker dem tilbake i TCP-rekkefølge.
         info.tcpFlags = static_cast<std::uint8_t>((tcp->Fin ? tcpflags::FIN : 0) | (tcp->Syn ? tcpflags::SYN : 0) |
                                                   (tcp->Rst ? tcpflags::RST : 0) | (tcp->Psh ? tcpflags::PSH : 0) |

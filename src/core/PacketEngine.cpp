@@ -4,6 +4,7 @@
 #include <windivert.h>
 
 #include <cstring>
+#include <optional>
 #include <span>
 #include <stdexcept>
 
@@ -11,6 +12,7 @@
 
 #include "FeatureExtractor.hpp"
 #include "ProcessResolver.hpp"
+#include "RejectBuilder.hpp"
 #include "WinUtil.hpp"
 
 namespace aifw {
@@ -29,63 +31,16 @@ UINT ipPacketLength(const std::uint8_t* p, UINT avail) noexcept {
     return (len > 0 && len <= avail) ? len : 0;
 }
 
-// Enkel TCP RST for IPv4 (kan utvides for IPv6).
-struct TcpRstPacket {
-    WINDIVERT_IPHDR ip;
-    WINDIVERT_TCPHDR tcp;
-};
-
-void sendTcpRst(HANDLE handle, const PacketInfo& info, const WINDIVERT_ADDRESS& origAddr) {
-    if (info.srcIp.version != 4) return;  // kun IPv4 for enkelhets skyld nå
-    TcpRstPacket rst{};
-    rst.ip.Version = 4;
-    rst.ip.HdrLength = 5;
-    rst.ip.Length = htons(sizeof(rst));
-    rst.ip.TTL = 64;
-    rst.ip.Protocol = IPPROTO_TCP;
-    // Bytt retning: RST tilbake til avsender
-    std::memcpy(&rst.ip.SrcAddr, info.dstIp.bytes.data(), 4);
-    std::memcpy(&rst.ip.DstAddr, info.srcIp.bytes.data(), 4);
-    rst.tcp.SrcPort = htons(info.dstPort);
-    rst.tcp.DstPort = htons(info.srcPort);
-    rst.tcp.Rst = 1;
-    rst.tcp.Ack = 1;
-    rst.tcp.HdrLength = 5;
-    // Seq/Ack kan settes mer nøyaktig hvis vi har dem, men dette er nok for å avbryte.
-
-    WINDIVERT_ADDRESS addr = origAddr;
-    addr.Outbound = !origAddr.Outbound;  // motsatt retning
-    WinDivertHelperCalcChecksums(&rst, sizeof(rst), &addr, 0);
-    WinDivertSend(handle, &rst, sizeof(rst), nullptr, &addr);
-}
-
-// ICMP port unreachable for UDP (IPv4).
-struct IcmpUnreachPacket {
-    WINDIVERT_IPHDR ip;
-    WINDIVERT_ICMPHDR icmp;
-    // Original header + 8 bytes payload (forenklet)
-    std::uint8_t orig[28];
-};
-
-void sendIcmpUnreach(HANDLE handle, const PacketInfo& info, const WINDIVERT_ADDRESS& origAddr) {
-    if (info.srcIp.version != 4) return;
-    IcmpUnreachPacket icmp{};
-    icmp.ip.Version = 4;
-    icmp.ip.HdrLength = 5;
-    icmp.ip.Length = htons(sizeof(icmp));
-    icmp.ip.TTL = 64;
-    icmp.ip.Protocol = IPPROTO_ICMP;
-    std::memcpy(&icmp.ip.SrcAddr, info.dstIp.bytes.data(), 4);
-    std::memcpy(&icmp.ip.DstAddr, info.srcIp.bytes.data(), 4);
-    icmp.icmp.Type = 3;  // Destination unreachable
-    icmp.icmp.Code = 3;  // Port unreachable
-    // Kopier litt av original (forenklet)
-    // ... (kan utvides)
+void sendReject(HANDLE handle, const PacketInfo& info, std::span<const std::uint8_t> raw,
+                const WINDIVERT_ADDRESS& origAddr) {
+    std::optional<std::vector<std::uint8_t>> pkt;
+    if (info.protocol == Protocol::TCP) pkt = buildTcpRst(info);
+    else if (info.protocol == Protocol::UDP) pkt = buildPortUnreachable(info, raw);
+    if (!pkt) return;
 
     WINDIVERT_ADDRESS addr = origAddr;
     addr.Outbound = !origAddr.Outbound;
-    WinDivertHelperCalcChecksums(&icmp, sizeof(icmp), &addr, 0);
-    WinDivertSend(handle, &icmp, sizeof(icmp), nullptr, &addr);
+    WinDivertSend(handle, pkt->data(), static_cast<UINT>(pkt->size()), nullptr, &addr);
 }
 }  // namespace
 
@@ -214,11 +169,7 @@ void PacketEngine::workerLoop(std::stop_token st, unsigned index) {
             } else {
                 dropped_.fetch_add(1, std::memory_order_relaxed);
                 if (cfg_.injectRejectOnBlock && info) {
-                    if (info->protocol == Protocol::TCP) {
-                        sendTcpRst(handle_, *info, addr);
-                    } else if (info->protocol == Protocol::UDP) {
-                        sendIcmpUnreach(handle_, *info, addr);
-                    }
+                    sendReject(handle_, *info, std::span(cur, pktLen), addr);
                 }
             }
             cur += pktLen;
