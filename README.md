@@ -17,6 +17,7 @@ Et **Qt 6**-ikon i system tray viser blokkeringer, logg og lar deg slå lærings
 | Flytsporing | 5-tuple-tabell, tidsavbrudd, Welford-statistikk | `src/core/FlowTracker.*` |
 | Vertsnivå-deteksjon | Sliding window per remote-IP (unike porter, nye flyter, SYN) | `src/core/HostTracker.*` |
 | Flyt-eksport | Anonymisert JSONL av utløpte flyter for ML-trening | `src/core/FlowExporter.*` |
+| GeoIP | MaxMind GeoLite2 via libmaxminddb (valgfri) | `src/core/GeoIpLookup.*` |
 | Features | Egen IPv4/IPv6/TCP/UDP-parser + `WinDivertHelperParsePacket`, Shannon-entropi | `src/core/FeatureExtractor.*`, `Entropy.*` |
 | KI-inferens | ONNX Runtime, trådpool, batching, terskler, circuit breaker | `src/core/AIDecisionEngine.*`, `OnnxModel.cpp` |
 | Regelmotor | JSON-regler: app, port(-område), IP/CIDR (v4/v6), retning, protokoll | `src/core/RuleEngine.*` |
@@ -53,6 +54,7 @@ flowchart LR
         LM[LearningMode]
         WM[WfpManager]
         PS[PipeServer]
+        GEO[GeoIpLookup<br/>GeoLite2]
     end
 
     GUI[aifw_gui.exe<br/>Qt 6 tray]
@@ -70,6 +72,7 @@ flowchart LR
     DC -- 4. asynkront --> AI --> OX
     AI -- verdikt --> VC
     DC --> LM
+    DC -. landkode .-> GEO
     AI -- persistent blokk --> WM --> BFE
     RE -- persistent=true --> WM
     DC -- allow --> PE -- reinjiser --> WD
@@ -90,6 +93,8 @@ flowchart LR
    for den pakken (heller det enn å blokkere nettverket).
 
 Ved blokkering kan PacketEngine injisere **TCP RST** eller **ICMP unreachable** (konfigurerbart) slik at appen får rask feil i stedet for timeout.
+
+Når `geoip.enabled` er `true` og en GeoLite2-Country `.mmdb` ligger på angitt sti, berikes blokkerings-hendelser med ISO-landkode.
 
 Se [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detaljer om tråder, eierskap og dataflyt.
 
@@ -142,9 +147,10 @@ Første gang tar vcpkg tid (Qt og ONNX Runtime bygges/lastes ned). Alternativer:
 - **ONNX Runtime fra offisiell zip** i stedet for vcpkg: last ned `onnxruntime-win-x64-<ver>.zip`,
   sett `$env:ONNXRUNTIME_DIR` og bruk presetet `windows-manual-onnx`.
 - **Uten GUI**: `-DAIFW_BUILD_GUI=OFF`. **Uten ONNX** (kun heuristikk + regler): `-DAIFW_WITH_ONNX=OFF`.
+- **Uten GeoIP**: `-DAIFW_WITH_GEOIP=OFF`.
 
 CMake-valg: `AIFW_BUILD_TESTS`, `AIFW_BUILD_TOOLS`, `AIFW_BUILD_SERVICE`, `AIFW_BUILD_GUI`,
-`AIFW_WITH_ONNX`, `AIFW_FETCH_DEPS`, `AIFW_WARNINGS_AS_ERRORS`, `WINDIVERT_DIR`, `ONNXRUNTIME_DIR`.
+`AIFW_WITH_ONNX`, `AIFW_WITH_GEOIP`, `AIFW_FETCH_DEPS`, `AIFW_WARNINGS_AS_ERRORS`, `WINDIVERT_DIR`, `ONNXRUNTIME_DIR`.
 
 ### WinDivert-oppsett
 - `WinDivert.dll` **og** `WinDivert64.sys` må ligge ved siden av `aifw_service.exe`
@@ -209,7 +215,7 @@ Utløpte flyter eksporteres anonymisert til `data/flows_export.jsonl` og kan bru
 
 ## Konfigurasjon
 
-- `config/config.json`: terskler, køer, tidsavbrudd, WinDivert-filter, WFP, logg.
+- `config/config.json`: terskler, køer, tidsavbrudd, WinDivert-filter, WFP, logg, GeoIP.
   Alle stier er relative til mappen med `aifw_service.exe`. Kommentarer (`//`) er tillatt.
 - `config/rules.json`: regler. Høyest `priority` vinner; ved lik prioritet vinner `deny`.
   ```json
@@ -218,6 +224,11 @@ Utløpte flyter eksporteres anonymisert til `data/flows_export.jsonl` og kan bru
   ```
   `app` kan være full sti, bare filnavn, eller wildcard (`*`, `?`), uten hensyn til store/små bokstaver.
   `persistent: true` legger regelen inn i WFP (krever full app-sti uten wildcard).
+
+### GeoIP
+Sett `geoip.enabled` til `true` og legg en `GeoLite2-Country.mmdb` (eller City) i `data/`.
+Databasen kan lastes ned fra MaxMind (krever gratis konto) eller fra uoffisielle speil som
+[FyraLabs/geolite2](https://github.com/FyraLabs/geolite2). Husk GeoLite2 EULA (attribusjon + jevnlig oppdatering).
 
 ## Viktige advarsler
 
@@ -254,7 +265,7 @@ Utløpte flyter eksporteres anonymisert til `data/flows_export.jsonl` og kan bru
 - [x] TCP RST / ICMP unreachable ved blokkering (raskere feil for appen enn timeout) – grunnleggende IPv4-støtte
 - [x] Eksport av ekte flyter fra tjenesten (anonymisert) for trening på egen trafikk
 - [~] Modellversjonering + signert modellfil, hot-reload av modell (IPC-kommando `reload_model` lagt til; full hot-swap krever utvidelse av AIDecisionEngine)
-- [ ] DNS-oppslag i loggen (domenenavn i stedet for IP), GeoIP
+- [~] DNS-oppslag i loggen (domenenavn i stedet for IP), GeoIP (GeoIP-landkode lagt til; DNS gjenstår)
 - [ ] Per-app-statistikk og "spør brukeren"-dialog for nye apper (interaktiv modus)
 - [ ] WinUI 3-variant av GUI-et, MSIX/WiX-installer med signering
 - [ ] Fuzzing av pakkeparseren (libFuzzer) og ETW-logging
@@ -264,4 +275,4 @@ Utløpte flyter eksporteres anonymisert til `data/flows_export.jsonl` og kan bru
 
 Ingen lisens er valgt ennå. Merk at **WinDivert er dobbeltlisensiert LGPLv3 / GPLv2** – sjekk
 vilkårene før distribusjon. ONNX Runtime er MIT, Qt er LGPLv3/kommersiell, spdlog og
-nlohmann/json er MIT.
+nlohmann/json er MIT. GeoLite2-data er under MaxMind GeoLite2 EULA.
