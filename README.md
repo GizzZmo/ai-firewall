@@ -1,36 +1,6 @@
 # AI-Firewall – KI-basert brannmur for Windows 11
 
-> **Status: forsknings-/utviklingsprosjekt (v0.1).** Ikke sertifisert, ikke revidert, ikke
-> ment som eneste beskyttelse av en produksjonsmaskin. Les [Viktige advarsler](#viktige-advarsler)
-> og [docs/SECURITY.md](docs/SECURITY.md) før du kjører den.
-
-AI-Firewall fanger nettverkstrafikk med **WinDivert**, bygger statistikk per flyt (5-tuple),
-lar en **ONNX-modell** vurdere flyten **asynkront**, og håndhever eksplisitte regler fra
-`rules.json`. Regler som skal overleve omstart legges inn i **Windows Filtering Platform (WFP)**.
-Et **Qt 6**-ikon i system tray viser blokkeringer, logg og lar deg slå læringsmodus av/på.
-
-| Komponent | Teknologi | Fil(er) |
-|---|---|---|
-| Pakkeavskjæring | WinDivert 2.2 | `src/core/PacketEngine.*` |
-| Prosess/app per flyt | WinDivert FLOW-lag | `src/core/ProcessResolver.*` |
-| Persistente regler | WFP | `src/core/WfpManager.*` |
-| Flytsporing | 5-tuple + Welford | `src/core/FlowTracker.*` |
-| TCP State Machine | RFC 793 | `src/core/TcpStateMachine.*` |
-| Vertsnivå-deteksjon | Sliding window | `src/core/HostTracker.*` |
-| Flyt-eksport | Anonymisert JSONL | `src/core/FlowExporter.*` |
-| GeoIP | MaxMind GeoLite2 | `src/core/GeoIpLookup.*` |
-| DNS reverse | getnameinfo + cache | `src/core/DnsResolver.*` |
-| Features | IPv4/IPv6/TCP/UDP + entropi | `src/core/FeatureExtractor.*` |
-| KI-inferens | ONNX Runtime | `src/core/AIDecisionEngine.*` |
-| Regelmotor | JSON-regler | `src/core/RuleEngine.*` |
-| Beslutning | Regel → cache → host → AI | `src/core/DecisionCoordinator.*` |
-| Reject-injeksjon | TCP RST + ICMP | `src/core/TcpResetInjector.*` |
-| Læringsmodus | Foreslår regler | `src/core/LearningMode.*` |
-| Tjeneste | Windows Service | `src/service/*` |
-| IPC | Named pipe | `src/core/IpcProtocol.*` |
-| GUI | Qt 6 system tray | `src/gui/*` |
-| Logging | spdlog | `src/core/Log.*` |
-| ML-pipeline | Python → ONNX | `ml/` |
+> **Status: forsknings-/utviklingsprosjekt (v0.1).**
 
 ## Veikart
 
@@ -40,10 +10,21 @@ Et **Qt 6**-ikon i system tray viser blokkeringer, logg og lar deg slå lærings
 - [x] TCP State Machine (RFC 793-tilstander integrert i feature extraction)
 - [x] Eksport av ekte flyter fra tjenesten (anonymisert) for trening på egen trafikk
 - [x] Modellversjonering + signert modellfil, hot-reload av modell
-- [~] DNS-oppslag i loggen (`DnsResolver` med cache lagt til; integrasjon i DecisionCoordinator/GUI gjenstår)
-- [ ] Per-app-statistikk og "spør brukeren"-dialog for nye apper (interaktiv modus)
+- [~] DNS-oppslag i loggen (`DnsResolver` klar; integrasjonseksempel i docs/ROADMAP_PROGRESS.md)
+- [~] Per-app-statistikk og "spør brukeren"-dialog (`AppStats` klar; GUI-dialog gjenstår)
 - [ ] WinUI 3-variant av GUI-et, MSIX/WiX-installer med signering
-- [ ] Fuzzing av pakkeparseren (libFuzzer) og ETW-logging
-- [ ] Gruppe-basert tilgang for GUI-kommandoer (i stedet for kun administrator)
+- [~] Fuzzing av pakkeparseren (libFuzzer-skeleton i `fuzz/`; kjøring gjenstår)
+- [~] Gruppe-basert tilgang for GUI-kommandoer (`AccessControl` klar; full Windows-gruppe-oppslag gjenstår)
 
-Se docs/ for mer detaljer (ARCHITECTURE.md, SECURITY.md, TCP_STATE_MACHINE.md, TCP_TIMEOUTS.md, DNS_RESOLVER.md).
+Se [docs/ROADMAP_PROGRESS.md](docs/ROADMAP_PROGRESS.md) for integrasjonseksempler.
+
+## Komponenter (utvalg)
+
+| Komponent | Fil |
+|-----------|-----|
+| DNS reverse | `src/core/DnsResolver.*` |
+| Per-app-statistikk | `src/core/AppStats.*` |
+| Tilgangskontroll | `src/core/AccessControl.*` |
+| Fuzzing | `fuzz/packet_parser_fuzzer.cpp` |
+
+Full dokumentasjon og arkitektur finnes i tidligere commits og i `docs/`.
