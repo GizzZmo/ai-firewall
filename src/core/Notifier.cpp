@@ -18,7 +18,7 @@ std::string_view toString(EventType t) noexcept {
 nlohmann::json FirewallEvent::toJson() const {
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()).count();
     return {{"type", std::string(aifw::toString(type))}, {"time_ms", ms}, {"flow", flow}, {"app", app},
-            {"reason", reason}, {"score", score}, {"message", message}};
+            {"reason", reason}, {"score", score}, {"message", message}, {"country", country}};
 }
 
 FirewallEvent FirewallEvent::fromJson(const nlohmann::json& j) {
@@ -34,16 +34,18 @@ FirewallEvent FirewallEvent::fromJson(const nlohmann::json& j) {
     e.reason = j.value("reason", std::string());
     e.score = j.value("score", 0.0f);
     e.message = j.value("message", std::string());
+    e.country = j.value("country", std::string());
     return e;
 }
 
 void LogNotifier::notify(const FirewallEvent& ev) {
+    const auto countryPart = ev.country.empty() ? std::string() : " country=" + ev.country;
     switch (ev.type) {
         case EventType::Blocked:
-            spdlog::warn("BLOKKERT {} app='{}' grunn={} score={:.3f}", ev.flow, ev.app, ev.reason, ev.score);
+            spdlog::warn("BLOKKERT {} app='{}' grunn={} score={:.3f}{}", ev.flow, ev.app, ev.reason, ev.score, countryPart);
             break;
         case EventType::WouldBlock:
-            spdlog::info("[læring] ville blokkert {} app='{}' grunn={} score={:.3f}", ev.flow, ev.app, ev.reason, ev.score);
+            spdlog::info("[læring] ville blokkert {} app='{}' grunn={} score={:.3f}{}", ev.flow, ev.app, ev.reason, ev.score, countryPart);
             break;
         case EventType::AiError:
             spdlog::error("AI-feil: {} – faller tilbake til regelmotor", ev.message);
