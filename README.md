@@ -15,6 +15,7 @@ Et **Qt 6**-ikon i system tray viser blokkeringer, logg og lar deg slå lærings
 | Prosess/app per flyt | WinDivert FLOW-lag | `src/core/ProcessResolver.*` |
 | Persistente regler | WFP (`FwpmEngineOpen0`, egen provider/sublayer, `FwpmFilterAdd0`) | `src/core/WfpManager.*` |
 | Flytsporing | 5-tuple-tabell, tidsavbrudd, Welford-statistikk | `src/core/FlowTracker.*` |
+| TCP State Machine | RFC 793-tilstander (SYN_SENT → ESTABLISHED → TIME_WAIT) | `src/core/TcpStateMachine.*` |
 | Vertsnivå-deteksjon | Sliding window per remote-IP (unike porter, nye flyter, SYN) | `src/core/HostTracker.*` |
 | Flyt-eksport | Anonymisert JSONL av utløpte flyter for ML-trening | `src/core/FlowExporter.*` |
 | GeoIP | MaxMind GeoLite2 via libmaxminddb (valgfri) | `src/core/GeoIpLookup.*` |
@@ -22,9 +23,10 @@ Et **Qt 6**-ikon i system tray viser blokkeringer, logg og lar deg slå lærings
 | KI-inferens | ONNX Runtime, trådpool, batching, terskler, circuit breaker | `src/core/AIDecisionEngine.*`, `OnnxModel.cpp` |
 | Regelmotor | JSON-regler: app, port(-område), IP/CIDR (v4/v6), retning, protokoll | `src/core/RuleEngine.*` |
 | Beslutning | Regel → cache → host → standard + asynkron AI, læringsmodus, fail-safe | `src/core/DecisionCoordinator.*` |
+| Reject-injeksjon | TCP RST (IPv4/IPv6 + extension headers) + ICMP/ICMPv6 Port Unreachable | `src/core/TcpResetInjector.*` |
 | Læringsmodus | Registrerer trafikk, foreslår regler | `src/core/LearningMode.*` |
 | Tjeneste | Windows-tjeneste, admin-sjekk, konsollmodus | `src/service/*` |
-| IPC | Named pipe `\\.\pipe\aifw`, JSON Lines | `src/core/IpcProtocol.*`, `src/service/PipeServer.*` |
+| IPC | Named pipe `\\\\.\\pipe\\aifw`, JSON Lines | `src/core/IpcProtocol.*`, `src/service/PipeServer.*` |
 | GUI | Qt 6 system tray, varsler, logg, læringsbryter | `src/gui/*` |
 | Logging | spdlog (konsoll + roterende fil) | `src/core/Log.*` |
 | ML-pipeline | Python, scikit-learn → skl2onnx → verifisering | `ml/` |
@@ -44,6 +46,7 @@ flowchart LR
         PR[ProcessResolver<br/>PID → exe]
         FX[FeatureExtractor]
         FT[FlowTracker<br/>5-tuple]
+        TSM[TcpStateMachine<br/>RFC 793]
         HT[HostTracker<br/>per remote-IP]
         FE[FlowExporter]
         DC{DecisionCoordinator}
@@ -55,6 +58,7 @@ flowchart LR
         WM[WfpManager]
         PS[PipeServer]
         GEO[GeoIpLookup<br/>GeoLite2]
+        RST[TcpResetInjector<br/>RST + ICMP]
     end
 
     GUI[aifw_gui.exe<br/>Qt 6 tray]
@@ -64,6 +68,7 @@ flowchart LR
     PR -. app-sti .-> PE
     PE --> FX --> DC
     DC --> FT
+    DC --> TSM
     DC --> HT
     FT -- utløpt --> FE
     DC -- 1. regel --> RE
@@ -76,6 +81,7 @@ flowchart LR
     AI -- persistent blokk --> WM --> BFE
     RE -- persistent=true --> WM
     DC -- allow --> PE -- reinjiser --> WD
+    DC -- block --> RST -- injiser --> WD
     AI -- hendelser --> PS <-- named pipe --> GUI
 ```
 
@@ -92,9 +98,9 @@ flowchart LR
    og bare regler + standard brukes til modellen svarer igjen. Full kø → ingen AI-vurdering
    for den pakken (heller det enn å blokkere nettverket).
 
-Ved blokkering kan PacketEngine injisere **TCP RST** eller **ICMP unreachable** (konfigurerbart) slik at appen får rask feil i stedet for timeout.
-
-Når `geoip.enabled` er `true` og en GeoLite2-Country `.mmdb` ligger på angitt sti, berikes blokkerings-hendelser med ISO-landkode.
+Ved blokkering injiserer `TcpResetInjector`:
+- **TCP RST** (IPv4 + IPv6, inkludert gjennomgang av extension headers)
+- **ICMP/ICMPv6 Port Unreachable** for UDP
 
 Se [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detaljer om tråder, eierskap og dataflyt.
 
@@ -262,7 +268,8 @@ Databasen kan lastes ned fra MaxMind (krever gratis konto) eller fra uoffisielle
 
 - [ ] Verifisere og profilere på Windows 11 (MSVC), inkl. stress-test (iperf3) og latensmåling
 - [x] Vertsnivå-features (mange flyter fra samme kilde → portskanning, brute force)
-- [x] TCP RST / ICMP unreachable ved blokkering (raskere feil for appen enn timeout) – grunnleggende IPv4-støtte
+- [x] TCP RST / ICMP unreachable ved blokkering (IPv4 + IPv6 med extension header-støtte, korrekte seq/ack)
+- [x] TCP State Machine (RFC 793-tilstander integrert i feature extraction)
 - [x] Eksport av ekte flyter fra tjenesten (anonymisert) for trening på egen trafikk
 - [x] Modellversjonering + signert modellfil, hot-reload av modell (IPC `reload_model` med valgfri `path`; trådsikker bytte via `setModel`)
 - [~] DNS-oppslag i loggen (domenenavn i stedet for IP), GeoIP (GeoIP-landkode lagt til; DNS gjenstår)
