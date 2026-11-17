@@ -1,31 +1,72 @@
 name: CI
-on: [push, pull_request]
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   linux-core:
+    name: Linux core + tests
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y ninja-build g++-14 clang-tidy cppcheck
-      - run: cmake --preset linux-core -DCMAKE_CXX_COMPILER=g++-14
-      - run: cmake --build --preset linux-core
-      - run: ctest --preset linux-core
-      - name: Static analysis (cppcheck)
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build g++-14 cppcheck
+
+      - name: Configure
+        run: cmake --preset linux-core -DCMAKE_CXX_COMPILER=g++-14
+
+      - name: Build
+        run: cmake --build --preset linux-core
+
+      - name: Test
+        run: ctest --preset linux-core --output-on-failure
+
+      - name: Static analysis
         run: cppcheck --enable=warning,style,performance --error-exitcode=0 --suppress=missingIncludeSystem src/core/ 2>&1 | head -50
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - name: ML-pipeline
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: ML pipeline validation
         working-directory: ml
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
           python -m aifw_ml.train --flows 1500 --out out
           python -m aifw_ml.verify_onnx
 
+      - name: Upload ML artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ml-artifacts
+          path: |
+            ml/out/**
+            ml/**/*.json
+          if-no-files-found: warn
+
   linux-sanitizers:
+    name: Linux sanitizers
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y ninja-build g++-14
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y ninja-build g++-14
+
       - name: Build with sanitizers
         run: |
           cmake -B build-san -S . -G Ninja \
@@ -35,21 +76,62 @@ jobs:
             -DAIFW_WITH_ONNX=OFF \
             -DCMAKE_BUILD_TYPE=Debug
           cmake --build build-san
+
       - name: Run tests with sanitizers
         run: ctest --test-dir build-san --output-on-failure
 
-  windows:
+  windows-build:
+    name: Windows build + tests
     runs-on: windows-2022
     env:
-      VCPKG_ROOT: C:\vcpkg
+      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
     steps:
-      - uses: actions/checkout@v4
-      - name: WinDivert
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup vcpkg
         shell: pwsh
         run: |
-          Invoke-WebRequest https://github.com/basil00/WinDivert/releases/download/v2.2.2/WinDivert-2.2.2-A.zip -OutFile wd.zip
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git $env:GITHUB_WORKSPACE\vcpkg
+          .\vcpkg\bootstrap-vcpkg.bat
+
+      - name: Download WinDivert
+        shell: pwsh
+        run: |
+          Invoke-WebRequest `
+            https://github.com/basil00/WinDivert/releases/download/v2.2.2/WinDivert-2.2.2-A.zip `
+            -OutFile wd.zip
           Expand-Archive wd.zip -DestinationPath third_party
           "WINDIVERT_DIR=$PWD\third_party\WinDivert-2.2.2-A" | Out-File -Append $env:GITHUB_ENV
-      - run: cmake --preset windows-vcpkg -DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON -DVCPKG_MANIFEST_FEATURES=onnx -DAIFW_BUILD_GUI=OFF
-      - run: cmake --build --preset windows-release
-      - run: ctest --preset windows-release
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake --preset windows-vcpkg `
+            -DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON `
+            -DVCPKG_MANIFEST_FEATURES=onnx `
+            -DAIFW_BUILD_GUI=OFF
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build --preset windows-release
+
+      - name: Test
+        shell: pwsh
+        run: ctest --preset windows-release --output-on-failure
+
+      - name: Package build artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build\package | Out-Null
+          if (Test-Path .\build\windows-release) {
+            Copy-Item -Recurse .\build\windows-release\* build\package\ -Force
+          }
+          Compress-Archive -Path .\build\package\* -DestinationPath .\ai-firewall-windows.zip -Force
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-firewall-windows
+          path: .\ai-firewall-windows.zip
+          if-no-files-found: warn
