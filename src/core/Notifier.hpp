@@ -25,6 +25,7 @@ struct FirewallEvent {
     std::string reason;    // "rule:<id>", "ai", "failsafe", ...
     float score{0.0f};     // AI-score hvis relevant
     std::string message;
+    std::string country;   // ISO-landkode fra GeoIP (tom hvis ukjent)
 
     [[nodiscard]] nlohmann::json toJson() const;
     static FirewallEvent fromJson(const nlohmann::json& j);
