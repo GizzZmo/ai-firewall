@@ -66,6 +66,14 @@ Config Config::fromJson(const json& j) {
         read(a, "max_flows", c.flow.maxFlows);
         read(a, "entropy_sample_packets", c.flow.entropySamplePackets);
     }
+    if (j.contains("host")) {
+        const auto& a = j["host"];
+        read(a, "enabled", c.host.enabled);
+        readDur(a, "window_sec", c.host.window);
+        read(a, "max_unique_ports", c.host.maxUniquePorts);
+        read(a, "max_new_flows", c.host.maxNewFlows);
+        read(a, "max_syns", c.host.maxSyns);
+    }
     if (j.contains("windivert")) {
         const auto& a = j["windivert"];
         read(a, "filter", c.windivert.filter);
@@ -106,6 +114,7 @@ void Config::validate() const {
     if (windivert.queueLength < 32 || windivert.queueLength > 16384) fail("windivert.queue_length må være 32-16384");
     if (windivert.queueTimeMs < 100 || windivert.queueTimeMs > 16000) fail("windivert.queue_time_ms må være 100-16000");
     if (flow.maxFlows == 0) fail("flow.max_flows må være > 0");
+    if (host.window.count() <= 0) fail("host.window_sec må være > 0");
     if (pipeName.empty() || pipeName.find_first_of("\\/") != std::string::npos) fail("pipe_name kan ikke inneholde skråstrek");
 }
 
@@ -144,6 +153,12 @@ json Config::toJson() const {
           {"other_idle_timeout_ms", flow.otherIdleTimeout.count()},
           {"max_flows", flow.maxFlows},
           {"entropy_sample_packets", flow.entropySamplePackets}}},
+        {"host",
+         {{"enabled", host.enabled},
+          {"window_sec", host.window.count()},
+          {"max_unique_ports", host.maxUniquePorts},
+          {"max_new_flows", host.maxNewFlows},
+          {"max_syns", host.maxSyns}}},
         {"windivert",
          {{"filter", windivert.filter},
           {"priority", windivert.priority},
