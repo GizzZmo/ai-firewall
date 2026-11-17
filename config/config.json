@@ -64,5 +64,10 @@
     "enabled": true,
     "persist_ai_blocks": false,
     "sync_persistent_rules": true
+  },
+
+  "geoip": {
+    "enabled": false,
+    "mmdb_path": "data/GeoLite2-Country.mmdb"
   }
 }
