@@ -58,6 +58,7 @@ add_library(aifw_core STATIC
     src/core/FeatureExtractor.cpp
     src/core/FlowTracker.cpp
     src/core/HostTracker.cpp
+    src/core/FlowExporter.cpp
     src/core/RuleEngine.cpp
     src/core/Config.cpp
     src/core/VerdictCache.cpp
