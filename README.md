@@ -15,10 +15,11 @@ Et **Qt 6**-ikon i system tray viser blokkeringer, logg og lar deg slå lærings
 | Prosess/app per flyt | WinDivert FLOW-lag | `src/core/ProcessResolver.*` |
 | Persistente regler | WFP (`FwpmEngineOpen0`, egen provider/sublayer, `FwpmFilterAdd0`) | `src/core/WfpManager.*` |
 | Flytsporing | 5-tuple-tabell, tidsavbrudd, Welford-statistikk | `src/core/FlowTracker.*` |
+| Vertsnivå-deteksjon | Sliding window per remote-IP (unike porter, nye flyter, SYN) | `src/core/HostTracker.*` |
 | Features | Egen IPv4/IPv6/TCP/UDP-parser + `WinDivertHelperParsePacket`, Shannon-entropi | `src/core/FeatureExtractor.*`, `Entropy.*` |
 | KI-inferens | ONNX Runtime, trådpool, batching, terskler, circuit breaker | `src/core/AIDecisionEngine.*`, `OnnxModel.cpp` |
 | Regelmotor | JSON-regler: app, port(-område), IP/CIDR (v4/v6), retning, protokoll | `src/core/RuleEngine.*` |
-| Beslutning | Regel → cache → standard + asynkron AI, læringsmodus, fail-safe | `src/core/DecisionCoordinator.*` |
+| Beslutning | Regel → cache → host → standard + asynkron AI, læringsmodus, fail-safe | `src/core/DecisionCoordinator.*` |
 | Læringsmodus | Registrerer trafikk, foreslår regler | `src/core/LearningMode.*` |
 | Tjeneste | Windows-tjeneste, admin-sjekk, konsollmodus | `src/service/*` |
 | IPC | Named pipe `\\.\pipe\aifw`, JSON Lines | `src/core/IpcProtocol.*`, `src/service/PipeServer.*` |
@@ -41,6 +42,7 @@ flowchart LR
         PR[ProcessResolver<br/>PID → exe]
         FX[FeatureExtractor]
         FT[FlowTracker<br/>5-tuple]
+        HT[HostTracker<br/>per remote-IP]
         DC{DecisionCoordinator}
         RE[RuleEngine<br/>rules.json]
         VC[VerdictCache<br/>LRU + TTL]
@@ -58,9 +60,11 @@ flowchart LR
     PR -. app-sti .-> PE
     PE --> FX --> DC
     DC --> FT
+    DC --> HT
     DC -- 1. regel --> RE
     DC -- 2. cache --> VC
-    DC -- 3. asynkront --> AI --> OX
+    DC -- 3. host --> HT
+    DC -- 4. asynkront --> AI --> OX
     AI -- verdikt --> VC
     DC --> LM
     AI -- persistent blokk --> WM --> BFE
@@ -72,12 +76,13 @@ flowchart LR
 **Pakkeveien venter aldri på AI.** For hver pakke:
 
 1. **Regel** (`RuleEngine`) – eksplisitte allow/deny vinner alltid.
-2. **Cache** (`VerdictCache`) – tidligere AI-verdikt for flyten (TTL, LRU).
-3. **Standardverdikt** (normalt `allow`) – og *hvis flyten har nok pakker* legges en
+2. **Cache** (`VerdictCache`) – tidligere AI- eller host-verdikt for flyten (TTL, LRU).
+3. **Vertsnivå** (`HostTracker`) – på første pakke i ny flyt: for mange unike porter / nye flyter / SYN fra samme remote-IP → blokk.
+4. **Standardverdikt** (normalt `allow`) – og *hvis flyten har nok pakker* legges en
    forespørsel i AI-køen. Svaret havner i cachen og gjelder fra neste pakke.
    Flyter re-evalueres hver `reevaluate_every_packets` pakke, så en flyt som endrer
    karakter (f.eks. går over i SYN-flom) fanges.
-4. **Fail-safe**: Ved modellfeil åpnes en circuit breaker (etter `max_consecutive_errors`)
+5. **Fail-safe**: Ved modellfeil åpnes en circuit breaker (etter `max_consecutive_errors`)
    og bare regler + standard brukes til modellen svarer igjen. Full kø → ingen AI-vurdering
    for den pakken (heller det enn å blokkere nettverket).
 
@@ -238,7 +243,7 @@ cp out/flow_classifier.onnx ../models/
 ## Veikart
 
 - [ ] Verifisere og profilere på Windows 11 (MSVC), inkl. stress-test (iperf3) og latensmåling
-- [ ] Vertsnivå-features (mange flyter fra samme kilde → portskanning, brute force); i dag ser
+- [x] Vertsnivå-features (mange flyter fra samme kilde → portskanning, brute force); i dag ser
       AI bare én flyt om gangen, så skanning med 1 pakke per port fanges kun av regler
 - [ ] TCP RST / ICMP unreachable ved blokkering (raskere feil for appen enn timeout)
 - [ ] Eksport av ekte flyter fra tjenesten (anonymisert) for trening på egen trafikk
