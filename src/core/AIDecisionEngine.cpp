@@ -10,7 +10,8 @@ std::int64_t nowNs() {
 }
 }  // namespace
 
-AIDecisionEngine::AIDecisionEngine(std::unique_ptr<IModel> model, AiConfig cfg) : model_(std::move(model)), cfg_(cfg) {
+AIDecisionEngine::AIDecisionEngine(std::unique_ptr<IModel> model, AiConfig cfg)
+    : model_(std::move(model)), cfg_(cfg) {
     if (!model_) throw std::invalid_argument("AIDecisionEngine krever en modell");
     workers_.reserve(cfg_.workerThreads);
     for (std::size_t i = 0; i < cfg_.workerThreads; ++i)
@@ -40,6 +41,19 @@ void AIDecisionEngine::stop() {
     for (auto& r : leftover) {
         if (r.cb) r.cb(InferenceResult{r.key, false, 0.0f, Verdict::Unknown, "motoren stoppet"});
     }
+}
+
+void AIDecisionEngine::setModel(std::unique_ptr<IModel> model) {
+    if (!model) {
+        spdlog::error("setModel: null modell ignorert");
+        return;
+    }
+    std::shared_ptr<IModel> shared(std::move(model));
+    {
+        std::lock_guard lock(mutex_);
+        model_ = std::move(shared);
+    }
+    spdlog::info("Modell byttet til: {}", model_->name());
 }
 
 bool AIDecisionEngine::healthy() const noexcept {
@@ -75,6 +89,7 @@ void AIDecisionEngine::workerLoop(std::stop_token st) {
     batch.reserve(cfg_.maxBatch);
     rows.reserve(cfg_.maxBatch);
     while (!st.stop_requested()) {
+        std::shared_ptr<IModel> model;
         {
             std::unique_lock lock(mutex_);
             if (!cv_.wait(lock, st, [this] { return !queue_.empty(); })) return;  // stop forespurt
@@ -82,14 +97,20 @@ void AIDecisionEngine::workerLoop(std::stop_token st) {
                 batch.push_back(std::move(queue_.front()));
                 queue_.pop_front();
             }
+            model = model_;  // ta kopi under lås; pågående batch bruker denne
         }
+        if (!model) {
+            batch.clear();
+            continue;
+        }
+
         rows.clear();
         for (const auto& r : batch) rows.push_back(r.features);
 
         std::vector<float> scores;
         std::string error;
         try {
-            scores = model_->predictBatch(rows);
+            scores = model->predictBatch(rows);
             if (scores.size() != batch.size()) throw std::runtime_error("modellen returnerte feil antall resultater");
             recordSuccess();
         } catch (const std::exception& e) {
@@ -153,6 +174,9 @@ AiStats AIDecisionEngine::stats() const {
     return s;
 }
 
-std::string AIDecisionEngine::modelName() const { return model_->name(); }
+std::string AIDecisionEngine::modelName() const {
+    std::lock_guard lock(mutex_);
+    return model_ ? model_->name() : "<none>";
+}
 
 }  // namespace aifw
