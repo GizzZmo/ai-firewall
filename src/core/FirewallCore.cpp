@@ -26,6 +26,10 @@ FirewallCore::FirewallCore(Config cfg, std::filesystem::path baseDir, std::uniqu
 
     exporter_ = std::make_unique<FlowExporter>(resolve("data/flows_export.jsonl"));
 
+    if (cfg_.geoip.enabled) {
+        geoip_ = std::make_unique<GeoIpLookup>(resolve(cfg_.geoip.mmdbPath).string());
+    }
+
     try {
         rules_.loadFromFile(resolve(cfg_.rulesPath));
         spdlog::info("Lastet {} regler fra {}", rules_.size(), resolve(cfg_.rulesPath).string());
@@ -44,7 +48,8 @@ FirewallCore::FirewallCore(Config cfg, std::filesystem::path baseDir, std::uniqu
     } else {
         spdlog::warn("AI er avslått i konfig – kun regelmotor");
     }
-    coordinator_ = std::make_unique<DecisionCoordinator>(cfg_, rules_, flows_, hosts_, cache_, ai_.get(), learning_, notifier_, sink);
+    coordinator_ = std::make_unique<DecisionCoordinator>(cfg_, rules_, flows_, hosts_, cache_, ai_.get(), learning_,
+                                                         notifier_, sink, geoip_.get());
 }
 
 FirewallCore::~FirewallCore() { stop(); }
