@@ -41,6 +41,27 @@ if(AIFW_WITH_ONNX)
     endif()
 endif()
 
+if(AIFW_WITH_GEOIP)
+    find_package(maxminddb CONFIG QUIET)
+    if(NOT TARGET maxminddb::maxminddb)
+        if(NOT AIFW_FETCH_DEPS)
+            message(FATAL_ERROR "libmaxminddb ikke funnet. Installer via vcpkg eller sett AIFW_FETCH_DEPS=ON")
+        endif()
+        message(STATUS "libmaxminddb ikke funnet – henter fra GitHub")
+        FetchContent_Declare(libmaxminddb
+            GIT_REPOSITORY https://github.com/maxmind/libmaxminddb.git
+            GIT_TAG 1.9.1
+            GIT_SHALLOW TRUE)
+        set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(libmaxminddb)
+        if(NOT TARGET maxminddb::maxminddb)
+            add_library(maxminddb::maxminddb ALIAS maxminddb)
+        endif()
+    else()
+        message(STATUS "libmaxminddb funnet")
+    endif()
+endif()
+
 if(WIN32)
     find_package(WinDivert REQUIRED)  # cmake/FindWinDivert.cmake (WINDIVERT_DIR)
 endif()
