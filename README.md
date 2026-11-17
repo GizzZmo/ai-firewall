@@ -16,6 +16,7 @@ Et **Qt 6**-ikon i system tray viser blokkeringer, logg og lar deg slå lærings
 | Persistente regler | WFP (`FwpmEngineOpen0`, egen provider/sublayer, `FwpmFilterAdd0`) | `src/core/WfpManager.*` |
 | Flytsporing | 5-tuple-tabell, tidsavbrudd, Welford-statistikk | `src/core/FlowTracker.*` |
 | Vertsnivå-deteksjon | Sliding window per remote-IP (unike porter, nye flyter, SYN) | `src/core/HostTracker.*` |
+| Flyt-eksport | Anonymisert JSONL av utløpte flyter for ML-trening | `src/core/FlowExporter.*` |
 | Features | Egen IPv4/IPv6/TCP/UDP-parser + `WinDivertHelperParsePacket`, Shannon-entropi | `src/core/FeatureExtractor.*`, `Entropy.*` |
 | KI-inferens | ONNX Runtime, trådpool, batching, terskler, circuit breaker | `src/core/AIDecisionEngine.*`, `OnnxModel.cpp` |
 | Regelmotor | JSON-regler: app, port(-område), IP/CIDR (v4/v6), retning, protokoll | `src/core/RuleEngine.*` |
@@ -43,6 +44,7 @@ flowchart LR
         FX[FeatureExtractor]
         FT[FlowTracker<br/>5-tuple]
         HT[HostTracker<br/>per remote-IP]
+        FE[FlowExporter]
         DC{DecisionCoordinator}
         RE[RuleEngine<br/>rules.json]
         VC[VerdictCache<br/>LRU + TTL]
@@ -61,6 +63,7 @@ flowchart LR
     PE --> FX --> DC
     DC --> FT
     DC --> HT
+    FT -- utløpt --> FE
     DC -- 1. regel --> RE
     DC -- 2. cache --> VC
     DC -- 3. host --> HT
@@ -85,6 +88,8 @@ flowchart LR
 5. **Fail-safe**: Ved modellfeil åpnes en circuit breaker (etter `max_consecutive_errors`)
    og bare regler + standard brukes til modellen svarer igjen. Full kø → ingen AI-vurdering
    for den pakken (heller det enn å blokkere nettverket).
+
+Ved blokkering kan PacketEngine injisere **TCP RST** eller **ICMP unreachable** (konfigurerbart) slik at appen får rask feil i stedet for timeout.
 
 Se [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detaljer om tråder, eierskap og dataflyt.
 
@@ -200,6 +205,8 @@ cp out/flow_classifier.onnx ../models/
 
 `models/flow_classifier.onnx` er ikke committet i repoet; den regenereres med `python -m aifw_ml.train` (deretter `cp out/flow_classifier.onnx ../models/`). Det er en **demomodell trent på syntetiske data**. Tren din egen før du slår av læringsmodus.
 
+Utløpte flyter eksporteres anonymisert til `data/flows_export.jsonl` og kan brukes til å trene en bedre modell på din egen trafikk.
+
 ## Konfigurasjon
 
 - `config/config.json`: terskler, køer, tidsavbrudd, WinDivert-filter, WFP, logg.
@@ -243,11 +250,10 @@ cp out/flow_classifier.onnx ../models/
 ## Veikart
 
 - [ ] Verifisere og profilere på Windows 11 (MSVC), inkl. stress-test (iperf3) og latensmåling
-- [x] Vertsnivå-features (mange flyter fra samme kilde → portskanning, brute force); i dag ser
-      AI bare én flyt om gangen, så skanning med 1 pakke per port fanges kun av regler
-- [ ] TCP RST / ICMP unreachable ved blokkering (raskere feil for appen enn timeout)
-- [ ] Eksport av ekte flyter fra tjenesten (anonymisert) for trening på egen trafikk
-- [ ] Modellversjonering + signert modellfil, hot-reload av modell
+- [x] Vertsnivå-features (mange flyter fra samme kilde → portskanning, brute force)
+- [x] TCP RST / ICMP unreachable ved blokkering (raskere feil for appen enn timeout) – grunnleggende IPv4-støtte
+- [x] Eksport av ekte flyter fra tjenesten (anonymisert) for trening på egen trafikk
+- [~] Modellversjonering + signert modellfil, hot-reload av modell (IPC-kommando `reload_model` lagt til; full hot-swap krever utvidelse av AIDecisionEngine)
 - [ ] DNS-oppslag i loggen (domenenavn i stedet for IP), GeoIP
 - [ ] Per-app-statistikk og "spør brukeren"-dialog for nye apper (interaktiv modus)
 - [ ] WinUI 3-variant av GUI-et, MSIX/WiX-installer med signering
