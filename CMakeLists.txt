@@ -13,6 +13,7 @@ option(AIFW_BUILD_TOOLS   "Bygg verktøy (aifw_sim trafikk-simulator)"         O
 option(AIFW_BUILD_SERVICE "Bygg Windows-tjenesten (kun Windows)"              ${WIN32})
 option(AIFW_BUILD_GUI     "Bygg Qt 6 system tray-GUI"                         ${WIN32})
 option(AIFW_WITH_ONNX     "Bruk ONNX Runtime for AI-inferens"                 ${WIN32})
+option(AIFW_WITH_GEOIP    "Bruk MaxMind GeoLite2 via libmaxminddb"            ON)
 option(AIFW_FETCH_DEPS    "Hent spdlog/nlohmann_json/GoogleTest med FetchContent hvis de ikke finnes" ON)
 option(AIFW_WARNINGS_AS_ERRORS "Behandle advarsler som feil"                  OFF)
 
@@ -70,6 +71,7 @@ add_library(aifw_core STATIC
     src/core/IpcProtocol.cpp
     src/core/Log.cpp
     src/core/FirewallCore.cpp
+    src/core/GeoIpLookup.cpp
 )
 add_library(aifw::core ALIAS aifw_core)
 target_include_directories(aifw_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
@@ -81,6 +83,11 @@ if(AIFW_WITH_ONNX)
     target_sources(aifw_core PRIVATE src/core/OnnxModel.cpp)
     target_compile_definitions(aifw_core PUBLIC AIFW_WITH_ONNX=1)
     target_link_libraries(aifw_core PUBLIC onnxruntime::onnxruntime)
+endif()
+
+if(AIFW_WITH_GEOIP)
+    target_compile_definitions(aifw_core PUBLIC AIFW_WITH_GEOIP=1)
+    target_link_libraries(aifw_core PUBLIC maxminddb::maxminddb)
 endif()
 
 if(WIN32)
