@@ -23,11 +23,9 @@ SettingsDialog::SettingsDialog(ServiceClient* client, QWidget* parent)
 
     auto* layout = new QVBoxLayout(this);
 
-    // Aktivert
     enabledCheck_ = new QCheckBox(tr("Aktiver AI-beslutninger"));
     layout->addWidget(enabledCheck_);
 
-    // Leverandør
     auto* providerGroup = new QGroupBox(tr("AI-leverandør"));
     auto* providerLayout = new QFormLayout(providerGroup);
 
@@ -35,28 +33,28 @@ SettingsDialog::SettingsDialog(ServiceClient* client, QWidget* parent)
     providerCombo_->addItem(tr("Lokal ONNX-modell"), "local");
     providerCombo_->addItem(tr("OpenAI API"), "openai");
     providerCombo_->addItem(tr("Azure OpenAI"), "azure");
+    providerCombo_->addItem(tr("Google Gemini"), "gemini");
+    providerCombo_->addItem(tr("xAI Grok"), "grok");
     providerCombo_->addItem(tr("Egendefinert endpoint"), "custom");
     connect(providerCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &SettingsDialog::onProviderChanged);
     providerLayout->addRow(tr("Type:"), providerCombo_);
 
-    // Lokal modell
     localModelEdit_ = new QLineEdit;
     localModelEdit_->setPlaceholderText("models/flow_classifier.onnx");
     providerLayout->addRow(tr("Modellfil:"), localModelEdit_);
 
-    // API-innstillinger
     apiKeyEdit_ = new QLineEdit;
     apiKeyEdit_->setEchoMode(QLineEdit::Password);
-    apiKeyEdit_->setPlaceholderText(tr("sk-... eller din nøkkel"));
+    apiKeyEdit_->setPlaceholderText(tr("API-nøkkel"));
     providerLayout->addRow(tr("API-nøkkel:"), apiKeyEdit_);
 
     endpointEdit_ = new QLineEdit;
-    endpointEdit_->setPlaceholderText("https://api.openai.com/v1/chat/completions");
+    endpointEdit_->setPlaceholderText("https://...");
     providerLayout->addRow(tr("Endpoint:"), endpointEdit_);
 
     modelEdit_ = new QLineEdit;
-    modelEdit_->setPlaceholderText("gpt-4o-mini");
+    modelEdit_->setPlaceholderText("modellnavn");
     providerLayout->addRow(tr("Modellnavn:"), modelEdit_);
 
     timeoutSpin_ = new QSpinBox;
@@ -67,7 +65,6 @@ SettingsDialog::SettingsDialog(ServiceClient* client, QWidget* parent)
 
     layout->addWidget(providerGroup);
 
-    // Terskler
     auto* thresholdGroup = new QGroupBox(tr("Beslutningsterskler"));
     auto* thresholdLayout = new QFormLayout(thresholdGroup);
 
@@ -85,13 +82,11 @@ SettingsDialog::SettingsDialog(ServiceClient* client, QWidget* parent)
 
     layout->addWidget(thresholdGroup);
 
-    // Knapper
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
     connect(buttons, &QDialogButtonBox::accepted, this, &SettingsDialog::onSave);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     layout->addWidget(buttons);
 
-    // Last nåværende innstillinger
     connect(client_, &ServiceClient::statusReceived, this, &SettingsDialog::onStatusReceived);
     client_->requestStatus();
 
@@ -107,17 +102,43 @@ void SettingsDialog::updateUiForProvider() {
     const bool isLocal = (type == "local");
 
     localModelEdit_->setVisible(isLocal);
-    localModelEdit_->parentWidget()->layout()->itemAt(
-        localModelEdit_->parentWidget()->layout()->indexOf(localModelEdit_) - 1)->widget()->setVisible(isLocal);
+    // Finn label-widgeten (raden før)
+    auto* form = qobject_cast<QFormLayout*>(localModelEdit_->parentWidget()->layout());
+    if (form) {
+        auto* label = form->labelForField(localModelEdit_);
+        if (label) label->setVisible(isLocal);
+    }
 
     apiKeyEdit_->setVisible(!isLocal);
     endpointEdit_->setVisible(!isLocal);
     modelEdit_->setVisible(!isLocal);
     timeoutSpin_->setVisible(!isLocal);
+
+    // Sett placeholder og standardverdier basert på leverandør
+    if (type == "openai") {
+        endpointEdit_->setPlaceholderText("https://api.openai.com/v1/chat/completions");
+        modelEdit_->setPlaceholderText("gpt-4o-mini");
+        apiKeyEdit_->setPlaceholderText("sk-...");
+    } else if (type == "azure") {
+        endpointEdit_->setPlaceholderText("https://<resource>.openai.azure.com/...");
+        modelEdit_->setPlaceholderText("gpt-4o");
+        apiKeyEdit_->setPlaceholderText("Azure API-nøkkel");
+    } else if (type == "gemini") {
+        endpointEdit_->setPlaceholderText("https://generativelanguage.googleapis.com/v1beta/models");
+        modelEdit_->setPlaceholderText("gemini-2.0-flash");
+        apiKeyEdit_->setPlaceholderText("AIza...");
+    } else if (type == "grok") {
+        endpointEdit_->setPlaceholderText("https://api.x.ai/v1/chat/completions");
+        modelEdit_->setPlaceholderText("grok-3");
+        apiKeyEdit_->setPlaceholderText("xai-...");
+    } else if (type == "custom") {
+        endpointEdit_->setPlaceholderText("https://din-endpoint/v1/chat/completions");
+        modelEdit_->setPlaceholderText("modellnavn");
+        apiKeyEdit_->setPlaceholderText("API-nøkkel");
+    }
 }
 
 void SettingsDialog::onStatusReceived(const QJsonObject& status) {
-    // Last AI-innstillinger fra status hvis tilgjengelig
     const auto ai = status.value("ai_config").toObject();
     if (ai.isEmpty()) return;
 
@@ -128,9 +149,8 @@ void SettingsDialog::onStatusReceived(const QJsonObject& status) {
     if (idx >= 0) providerCombo_->setCurrentIndex(idx);
 
     localModelEdit_->setText(ai.value("model_path").toString());
-    // API-nøkkel vises ikke (sikkerhet) – bare placeholder hvis satt
     if (ai.value("has_api_key").toBool()) {
-        apiKeyEdit_->setPlaceholderText(tr("(nøkkel er satt)"))
+        apiKeyEdit_->setPlaceholderText(tr("(nøkkel er satt)"));
     }
     endpointEdit_->setText(ai.value("endpoint").toString());
     modelEdit_->setText(ai.value("model_name").toString());
@@ -145,7 +165,6 @@ void SettingsDialog::onSave() {
     config["provider"] = providerCombo_->currentData().toString();
     config["model_path"] = localModelEdit_->text();
 
-    // Bare send API-nøkkel hvis brukeren har skrevet inn noe nytt
     if (!apiKeyEdit_->text().isEmpty()) {
         config["api_key"] = apiKeyEdit_->text();
     }
