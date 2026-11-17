@@ -9,6 +9,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include "FlowTracker.hpp"
+#include "HostTracker.hpp"
 #include "Types.hpp"
 
 namespace aifw {
@@ -65,6 +66,7 @@ struct Config {
     AiConfig ai;
     CacheConfig cache;
     FlowTrackerConfig flow;
+    HostTrackerConfig host;
     WinDivertConfig windivert;
     WfpConfig wfp;
 
