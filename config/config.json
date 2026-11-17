@@ -56,7 +56,8 @@
     "queue_size_bytes": 4194304,
     "batch_size": 16,
     "worker_threads": 2,
-    "track_processes": true
+    "track_processes": true,
+    "inject_reject_on_block": true
   },
 
   "wfp": {
