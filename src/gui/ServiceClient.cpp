@@ -1,72 +1,83 @@
 #include "ServiceClient.hpp"
 
-#include <QJsonArray>
 #include <QJsonDocument>
+#include <QLocalSocket>
 
-ServiceClient::ServiceClient(QString pipeName, QObject* parent) : QObject(parent), pipeName_(std::move(pipeName)) {
-    reconnectTimer_.setInterval(3000);
-    connect(&reconnectTimer_, &QTimer::timeout, this, &ServiceClient::tryConnect);
-    connect(&socket_, &QLocalSocket::readyRead, this, &ServiceClient::onReadyRead);
-    connect(&socket_, &QLocalSocket::connected, this, [this] {
-        reconnectTimer_.stop();
-        buffer_.clear();
-        emit connectedChanged(true);
-        requestStatus();
-        requestEvents();
-    });
-    connect(&socket_, &QLocalSocket::disconnected, this, [this] {
-        emit connectedChanged(false);
-        reconnectTimer_.start();
-    });
-    connect(&socket_, &QLocalSocket::errorOccurred, this, [this](QLocalSocket::LocalSocketError) {
-        if (socket_.state() != QLocalSocket::ConnectedState && !reconnectTimer_.isActive()) reconnectTimer_.start();
-    });
+ServiceClient::ServiceClient(const QString& pipeName, QObject* parent)
+    : QObject(parent), pipeName_(pipeName), socket_(new QLocalSocket(this)) {
+    connect(socket_, &QLocalSocket::readyRead, this, &ServiceClient::onReadyRead);
+    connect(socket_, &QLocalSocket::connected, this, &ServiceClient::onConnected);
+    connect(socket_, &QLocalSocket::disconnected, this, &ServiceClient::onDisconnected);
 }
 
-void ServiceClient::start() { tryConnect(); }
-
-void ServiceClient::tryConnect() {
-    if (socket_.state() == QLocalSocket::UnconnectedState) socket_.connectToServer(pipeName_);
+void ServiceClient::start() {
+    socket_->connectToServer("\\\\.\\pipe\\" + pipeName_);
 }
 
-void ServiceClient::sendCommand(const QJsonObject& cmd) {
-    if (!isConnected()) {
-        emit errorReceived(cmd.value("cmd").toString(), tr("Ikke tilkoblet tjenesten"));
-        return;
-    }
-    QByteArray line = QJsonDocument(cmd).toJson(QJsonDocument::Compact);
-    line.append('\n');
-    socket_.write(line);
+void ServiceClient::send(const QJsonObject& msg) {
+    if (socket_->state() != QLocalSocket::ConnectedState) return;
+    QJsonDocument doc(msg);
+    socket_->write(doc.toJson(QJsonDocument::Compact) + "\n");
+}
+
+void ServiceClient::requestStatus() {
+    send({{"cmd", "get_status"}});
+}
+
+void ServiceClient::requestEvents() {
+    send({{"cmd", "get_events"}});
+}
+
+void ServiceClient::setLearningMode(bool enabled) {
+    send({{"cmd", "set_learning"}, {"enabled", enabled}});
+}
+
+void ServiceClient::reloadRules() {
+    send({{"cmd", "reload_rules"}});
+}
+
+void ServiceClient::setAiConfig(const QJsonObject& config) {
+    QJsonObject msg;
+    msg["cmd"] = "set_ai_config";
+    msg["config"] = config;
+    send(msg);
 }
 
 void ServiceClient::onReadyRead() {
-    buffer_.append(socket_.readAll());
-    qsizetype nl;
-    while ((nl = buffer_.indexOf('\n')) >= 0) {
-        const QByteArray line = buffer_.left(nl);
-        buffer_.remove(0, nl + 1);
-        QJsonParseError err{};
-        const auto doc = QJsonDocument::fromJson(line, &err);
-        if (err.error == QJsonParseError::NoError && doc.isObject()) handleMessage(doc.object());
+    buffer_.append(socket_->readAll());
+    while (true) {
+        int idx = buffer_.indexOf('\n');
+        if (idx < 0) break;
+        QByteArray line = buffer_.left(idx);
+        buffer_.remove(0, idx + 1);
+
+        QJsonDocument doc = QJsonDocument::fromJson(line);
+        if (!doc.isObject()) continue;
+        QJsonObject obj = doc.object();
+
+        const QString type = obj.value("type").toString();
+        if (type == "event") {
+            emit eventReceived(obj.value("event").toObject());
+        } else if (type == "reply") {
+            const QString cmd = obj.value("cmd").toString();
+            if (obj.value("ok").toBool()) {
+                if (cmd == "get_status") {
+                    emit statusReceived(obj);
+                }
+                emit replyReceived(cmd, obj);
+            } else {
+                emit errorReceived(cmd, obj.value("message").toString());
+            }
+        }
     }
-    if (buffer_.size() > kMaxLine) buffer_.clear();  // vern mot korrupt strøm
 }
 
-void ServiceClient::handleMessage(const QJsonObject& msg) {
-    const QString type = msg.value("type").toString();
-    if (type == "event") {
-        emit eventReceived(msg.value("event").toObject());
-        return;
-    }
-    if (type != "reply") return;
-    const QString cmd = msg.value("cmd").toString();
-    if (!msg.value("ok").toBool()) {
-        emit errorReceived(cmd, msg.value("error").toString());
-        return;
-    }
-    if (cmd == "get_status") emit statusReceived(msg.value("status").toObject());
-    if (cmd == "get_events") {
-        for (const auto& e : msg.value("events").toArray()) emit eventReceived(e.toObject());
-    }
-    emit replyReceived(cmd, msg);
+void ServiceClient::onConnected() {
+    emit connectedChanged(true);
+}
+
+void ServiceClient::onDisconnected() {
+    emit connectedChanged(false);
+    // Prøv å koble til igjen etter 2 sekunder
+    QTimer::singleShot(2000, this, &ServiceClient::start);
 }

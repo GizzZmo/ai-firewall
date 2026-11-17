@@ -1,47 +1,40 @@
-// Klient mot tjenestens named pipe. QLocalSocket bruker \\.\pipe\<navn> på Windows
-// (og Unix-socket på andre plattformer), så klassen er portabel.
 #pragma once
+// Klient for named pipe-kommunikasjon med tjenesten.
 
-#include <QByteArray>
 #include <QJsonObject>
-#include <QLocalSocket>
 #include <QObject>
-#include <QTimer>
+#include <QString>
+
+class QLocalSocket;
 
 class ServiceClient : public QObject {
     Q_OBJECT
 public:
-    explicit ServiceClient(QString pipeName, QObject* parent = nullptr);
+    explicit ServiceClient(const QString& pipeName, QObject* parent = nullptr);
 
     void start();
-    [[nodiscard]] bool isConnected() const { return socket_.state() == QLocalSocket::ConnectedState; }
-
-public slots:
-    void sendCommand(const QJsonObject& cmd);
-    void requestStatus() { sendCommand({{"cmd", "get_status"}}); }
-    void setLearningMode(bool on) { sendCommand({{"cmd", "set_learning"}, {"enabled", on}}); }
-    void reloadRules() { sendCommand({{"cmd", "reload_rules"}}); }
-    void requestSuggestions() { sendCommand({{"cmd", "get_suggestions"}}); }
-    void applySuggestions() { sendCommand({{"cmd", "apply_suggestions"}}); }
-    void requestEvents() { sendCommand({{"cmd", "get_events"}}); }
+    void requestStatus();
+    void requestEvents();
+    void setLearningMode(bool enabled);
+    void reloadRules();
+    void setAiConfig(const QJsonObject& config);
 
 signals:
     void connectedChanged(bool connected);
-    void eventReceived(const QJsonObject& event);
     void statusReceived(const QJsonObject& status);
+    void eventReceived(const QJsonObject& event);
     void replyReceived(const QString& cmd, const QJsonObject& reply);
     void errorReceived(const QString& cmd, const QString& message);
 
 private slots:
     void onReadyRead();
-    void tryConnect();
+    void onConnected();
+    void onDisconnected();
 
 private:
-    void handleMessage(const QJsonObject& msg);
+    void send(const QJsonObject& msg);
 
-    static constexpr int kMaxLine = 64 * 1024;
     QString pipeName_;
-    QLocalSocket socket_;
-    QTimer reconnectTimer_;
+    QLocalSocket* socket_;
     QByteArray buffer_;
 };
