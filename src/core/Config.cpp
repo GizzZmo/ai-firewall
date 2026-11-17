@@ -92,6 +92,11 @@ Config Config::fromJson(const json& j) {
         read(a, "persist_ai_blocks", c.wfp.persistAiBlocks);
         read(a, "sync_persistent_rules", c.wfp.syncPersistentRules);
     }
+    if (j.contains("geoip")) {
+        const auto& a = j["geoip"];
+        read(a, "enabled", c.geoip.enabled);
+        read(a, "mmdb_path", c.geoip.mmdbPath);
+    }
     c.validate();
     return c;
 }
@@ -174,6 +179,9 @@ json Config::toJson() const {
          {{"enabled", wfp.enabled},
           {"persist_ai_blocks", wfp.persistAiBlocks},
           {"sync_persistent_rules", wfp.syncPersistentRules}}},
+        {"geoip",
+         {{"enabled", geoip.enabled},
+          {"mmdb_path", geoip.mmdbPath}}},
     };
 }
 
