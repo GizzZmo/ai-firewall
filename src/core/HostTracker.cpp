@@ -4,17 +4,6 @@
 
 namespace aifw {
 
-// Hash for IpAddress (trengs for unordered_map).
-struct IpAddressHash {
-    std::size_t operator()(const IpAddress& ip) const noexcept {
-        std::size_t h = ip.version;
-        for (std::size_t i = 0; i < ip.length(); ++i) {
-            h = h * 31 + ip.bytes[i];
-        }
-        return h;
-    }
-};
-
 HostTracker::HostTracker(HostTrackerConfig cfg) : cfg_(std::move(cfg)) {}
 
 bool HostTracker::onNewFlow(const FlowKey& key, TimePoint now, bool isSyn) {
