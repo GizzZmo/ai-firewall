@@ -16,6 +16,7 @@ FirewallCore::FirewallCore(Config cfg, std::filesystem::path baseDir, std::uniqu
     : cfg_(std::move(cfg)),
       baseDir_(std::move(baseDir)),
       flows_(cfg_.flow),
+      hosts_(cfg_.host),
       cache_(cfg_.cache.maxEntries),
       learning_(cfg_.learningMode) {
     notifier_.add(std::make_unique<LogNotifier>());
@@ -42,7 +43,7 @@ FirewallCore::FirewallCore(Config cfg, std::filesystem::path baseDir, std::uniqu
     } else {
         spdlog::warn("AI er avslått i konfig – kun regelmotor");
     }
-    coordinator_ = std::make_unique<DecisionCoordinator>(cfg_, rules_, flows_, cache_, ai_.get(), learning_, notifier_, sink);
+    coordinator_ = std::make_unique<DecisionCoordinator>(cfg_, rules_, flows_, hosts_, cache_, ai_.get(), learning_, notifier_, sink);
 }
 
 FirewallCore::~FirewallCore() { stop(); }
@@ -85,6 +86,7 @@ void FirewallCore::startHousekeeping(std::chrono::milliseconds interval) {
 void FirewallCore::housekeeping(TimePoint now) {
     const auto removed = flows_.expire(now);
     if (removed) spdlog::debug("Fjernet {} utløpte flyter ({} aktive)", removed, flows_.size());
+    hosts_.expire(now);
     if (learning_.enabled() && now - lastLearningSave_ > std::chrono::minutes(1)) {
         learning_.save(resolve(cfg_.learningPath));
         lastLearningSave_ = now;
@@ -102,6 +104,7 @@ json FirewallCore::statusJson() const {
     json j{{"learning_mode", learning_.enabled()},
            {"rules", rules_.size()},
            {"active_flows", flows_.size()},
+           {"tracked_hosts", hosts_.size()},
            {"dropped_new_flows", flows_.droppedNewFlows()},
            {"packets", s.packets},
            {"allowed", s.allowed},
