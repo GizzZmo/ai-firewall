@@ -24,9 +24,9 @@ std::string_view toString(DecisionSource s) noexcept {
 
 DecisionCoordinator::DecisionCoordinator(const Config& cfg, RuleEngine& rules, FlowTracker& flows, HostTracker& hosts,
                                          VerdictCache& cache, AIDecisionEngine* ai, LearningMode& learning,
-                                         INotifier& notifier, IPersistentRuleSink* sink)
+                                         INotifier& notifier, IPersistentRuleSink* sink, GeoIpLookup* geoip)
     : cfg_(cfg), rules_(rules), flows_(flows), hosts_(hosts), cache_(cache), ai_(ai), learning_(learning),
-      notifier_(notifier), sink_(sink) {}
+      notifier_(notifier), sink_(sink), geoip_(geoip) {}
 
 DecisionCoordinator::~DecisionCoordinator() {
     // AI-callbacks refererer til `this`. Eieren skal stoppe AIDecisionEngine først, men
@@ -47,6 +47,12 @@ void DecisionCoordinator::clearPending(const FlowKey& k) {
 void DecisionCoordinator::setLearningMode(bool on) {
     learning_.setEnabled(on);
     spdlog::info("Læringsmodus {}", on ? "PÅ (ingen AI-blokkering)" : "AV (håndhever)");
+}
+
+void DecisionCoordinator::enrichEvent(FirewallEvent& ev, const FlowKey& key) const {
+    if (geoip_ && geoip_->available()) {
+        ev.country = geoip_->country(key.remoteIp);
+    }
 }
 
 Decision DecisionCoordinator::decide(const PacketInfo& pkt, TimePoint now) {
@@ -99,6 +105,7 @@ Decision DecisionCoordinator::decide(const PacketInfo& pkt, TimePoint now) {
             ev.app = ctx.appPath;
             ev.reason = "host";
             ev.message = learning_.enabled() ? "Vertsnivå-alarm (læringsmodus)" : "Blokkert av vertsnivå-detektor";
+            enrichEvent(ev, key);
             notifier_.notify(ev);
             if (!learning_.enabled()) {
                 // Cache blokkeringen slik at senere pakker i samme flyt også stoppes.
@@ -191,6 +198,7 @@ void DecisionCoordinator::onInference(const InferenceResult& r, const MatchConte
                 }
             }
         }
+        enrichEvent(ev, r.key);
         notifier_.notify(ev);
     } else if (r.verdict == Verdict::Allow) {
         cache_.put(r.key, Verdict::Allow, r.score, now + cfg_.cache.allowTtl);
